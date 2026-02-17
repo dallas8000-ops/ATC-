@@ -1,0 +1,244 @@
+# Example ATC Transcriptions
+# Based on Training Images
+
+## Example 1: From Image 3 (Punctuation)
+
+### BEFORE (Incorrect):
+"NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated. Squawk VFR, change to advisory is approved."
+
+### AFTER (Correct):
+NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated, squawk VFR change to advisory is approved
+
+### Violations:
+- ⚠ Quotation marks (Image 3)
+- ⚠ Period (Image 3)
+- ⚠ "Squawk" capitalized incorrectly
+
+
+## Example 2: From Images 6-7 (Numbers with Hyphens)
+
+### BEFORE (Incorrect):
+United 2648, contact Atlantic City 135.5. November 29-18 radar services terminated.
+
+### AFTER (Correct):
+UNITED TWO SIX FOUR EIGHT contact ATLANTIC CITY one three five point five, NOVEMBER TWO NINE ONE EIGHT radar services terminated
+
+### Violations:
+- ⚠ Numbers as digits: 2648, 135.5, 29-18 (Images 6-7)
+- ⚠ Hyphen in "29-18" (Image 7)
+- ⚠ Period (Image 3)
+- ⚠ Missing comma after callsign
+
+
+## Example 3: From Image 7 (TWENTY-NINE with hyphen)
+
+### BEFORE (Incorrect):
+NOVEMBER TWENTY-NINE EIGHTEEN radar services terminated
+
+### AFTER (Correct):
+NOVEMBER TWENTY NINE EIGHTEEN radar services terminated
+
+### Violations:
+- ⚠ Hyphen in "TWENTY-NINE" should be removed (Image 7)
+
+
+## Example 4: From Image 4 (Sentence Capitalization)
+
+### BEFORE (Incorrect):
+One three two four two, thanks, so long, VIVA ONE EIGHT SEVEN
+
+### AFTER (Correct):
+one three two four two, thanks, so long, VIVA ONE EIGHT SEVEN
+
+### Violations:
+- ⚠ "One" should not be capitalized - it's not a callsign (Image 4)
+
+
+## Example 5: From Image 4 (Flight Level)
+
+### BEFORE (Incorrect):
+VOLARIS SEVENTEEN ZERO TWO, Flight Level three six zero
+
+### AFTER (Correct):
+VOLARIS SEVENTEEN ZERO TWO, flight level three six zero
+
+### Violations:
+- ⚠ "Flight Level" should be lowercase - not a callsign (Image 4)
+
+
+## Example 6: From Image 5 (Runway capitalization)
+
+### BEFORE (Incorrect):
+MOBILE FOUR, Salinas ground proceed to CTAC Delta Papa Charlie, hold short Runway three one at Charlie
+
+### AFTER (Correct):
+MOBILE FOUR, Salinas ground proceed to CTAC Delta Papa Charlie, hold short runway three one at Charlie
+
+### Violations:
+- ⚠ "Runway" should be lowercase (Image 5)
+
+
+## Example 7: From Image 8 (Filler Words)
+
+### BEFORE (Incorrect):
+NOVEMBER TWO FIVE SIX, MEDEVAC PHOENIX NORTH contact KANSAS CITY center one three two point eight seven
+
+### AFTER (Correct):
+NOVEMBER TWO uh FIVE SIX, MEDEVAC PHOENIX NORTH contact KANSAS CITY center um one three two point eight seven
+
+### Note:
+- If you hear "uh" after TWO, include it (Image 8)
+- If you hear "um" after center, include it (Image 8)
+
+
+## Example 8: From Images 9-10 (Angled Brackets)
+
+### BEFORE (Incorrect):
+< > MEDEVAC
+
+### AFTER (Correct):
+<roger that> MEDEVAC
+
+### Violations:
+- ⚠ Empty brackets - always include your best guess (Images 9-10)
+
+
+## Example 9: From Images 9-10 (Wrong Bracket Type)
+
+### BEFORE (Incorrect):
+(roger that) MEDEVAC
+[roger that] MEDEVAC
+...MEDEVAC
+
+### AFTER (Correct):
+<roger that> MEDEVAC
+
+### Violations:
+- ⚠ Use angled brackets <> not parentheses () (Image 9-10)
+- ⚠ Use angled brackets <> not square brackets [] (Image 9-10)
+- ⚠ Use angled brackets <> not ellipsis ... (Image 9-10)
+
+
+## Example 10: From Image 11 (Full Callsign Capitalization)
+
+### BEFORE (Incorrect):
+Volaris SEVENTEEN ZERO TWO, flight level three six zero
+
+### AFTER (Correct):
+VOLARIS SEVENTEEN ZERO TWO, flight level three six zero
+
+### Violations:
+- ⚠ Entire callsign should be ALL CAPS - "Volaris" → "VOLARIS" (Image 11)
+
+
+## Example 11: From Image 11 (Partial Callsign lowercase)
+
+### BEFORE (Incorrect):
+VOLARIS seventeen zero two, flight level three six zero
+
+### AFTER (Correct):
+VOLARIS SEVENTEEN ZERO TWO, flight level three six zero
+
+### Violations:
+- ⚠ Entire callsign should be ALL CAPS (Image 11)
+
+
+## Example 12: Complex Clearance
+
+### BEFORE (Incorrect):
+"American 185, you're cleared to Chicago O'Hare via WYNDE3 departure, Rwy 28C, climb & maintain 5,000, expect FL350 10 min after departure, freq. 124.9, squawk 4521."
+
+### AFTER (Correct):
+AMERICAN ONE EIGHT FIVE, you are cleared to CHICAGO OHARE via WYNDE THREE departure, runway two eight CHARLIE, climb and maintain five thousand, expect flight level three five zero one zero minutes after departure, frequency one two four point nine, squawk four five two one
+
+### Violations:
+- ⚠ Quotation marks (Image 3)
+- ⚠ Multiple periods (Image 3)
+- ⚠ Numbers as digits (Images 6-7)
+- ⚠ "Rwy" abbreviation
+- ⚠ "Runway" capitalized (Image 5)
+- ⚠ "&" symbol instead of "and"
+
+
+## Common Mistakes to Avoid (From Training Images):
+
+### Image 1: Most Common Failures
+1. ❌ Formatting violations (highest impact on pass/fail)
+2. ❌ Callsign handling errors
+3. ❌ NATO phonetic spelling errors
+4. ❌ Number transcription errors
+5. ❌ Not including filler words
+6. ❌ Skipped or incomplete work
+
+### Image 3: Punctuation Errors
+1. ❌ Using periods (.)
+2. ❌ Using question marks (?)
+3. ❌ Using quotation marks (" or ')
+4. ✅ ONLY commas are allowed
+
+### Images 4-5: Capitalization Errors
+1. ❌ Capitalizing "One" at start of sentence
+2. ❌ Capitalizing "Flight Level"
+3. ❌ Capitalizing "Runway", "Airport", "Tower", "Ground"
+4. ❌ Partial callsign capitalization ("Volaris" instead of "VOLARIS")
+5. ✅ Entire callsign in ALL CAPS
+
+### Images 6-7: Number Errors
+1. ❌ Writing digits (123 instead of one two three)
+2. ❌ Using hyphens (12-34 or TWENTY-NINE)
+3. ❌ Not spelling out every digit
+4. ❌ Grouping numbers (ONE SEVEN instead of SEVENTEEN)
+5. ✅ Spell each digit separately
+
+### Image 8: Filler Word Errors
+1. ❌ Removing filler words (uh, um, oh, ah, hmm)
+2. ✅ Include ALL audible filler words
+
+### Images 9-10: Bracket Errors
+1. ❌ Leaving empty brackets <>
+2. ❌ Using parentheses () instead of angled brackets
+3. ❌ Using square brackets []
+4. ❌ Using ellipsis (...)
+5. ✅ Always use <best guess> with angled brackets
+
+### Image 11: Callsign Errors
+1. ❌ Partial capitalization ("United" or "volaris")
+2. ❌ Lowercase numbers in callsign ("seventeen" instead of "SEVENTEEN")
+3. ✅ ENTIRE callsign in ALL CAPS
+
+
+## Tips for Good Transcription:
+
+### Based on Image 12 (How to Identify Callsigns):
+1. ✅ **Listen for Placement:** Callsigns typically at beginning/end of transmission
+2. ✅ **Listen for Patterns:** Word/telephony + numbers + phonetic letters
+3. ✅ **Listen for Controllers:** They address aircraft by callsign before instructions
+
+### General Best Practices:
+1. ✅ Listen multiple times if needed
+2. ✅ Use angled brackets <> when uncertain (never empty)
+3. ✅ Spell out ALL numbers completely
+4. ✅ Identify callsigns at start of transmissions
+5. ✅ Include all filler words you hear
+6. ✅ Use commas to separate phrases naturally
+7. ✅ Keep non-callsign words lowercase
+8. ✅ Double-check with the auto-formatter
+9. ✅ Review violations tab for specific errors
+
+
+## Practice Sentences:
+
+Try transcribing these (answers at bottom):
+
+1. "Southwest 1837, turn right heading 090, descend & maintain 4,000."
+2. "N123AB, taxi to Runway 27R via Alpha & Bravo."
+3. "United 2549, uh, contact Tower on 118.3."
+
+
+### Answers:
+
+1. SOUTHWEST ONE EIGHT THREE SEVEN turn right heading zero nine zero descend and maintain four thousand
+
+2. NOVEMBER ONE TWO THREE ALPHA BRAVO taxi to runway two seven right via ALPHA and BRAVO
+
+3. UNITED TWO FIVE FOUR NINE uh contact tower on one one eight point three
