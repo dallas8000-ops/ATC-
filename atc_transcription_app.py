@@ -19,21 +19,20 @@ class ATCFormatter:
     """Handles all ATC transcription formatting rules based on training guidelines"""
 
     # Standard phraseology (FAA AIM/JO 7110.65) for pilots and controllers
-    PILOT_PHRASEOLOGY = [
-        'roger', 'wilco', 'affirmative', 'negative', 'standby', 'unable', 'cleared',
-        'ready', 'request', 'with you', 'leaving', 'passing', 'descending', 'climbing',
-        'maintain', 'contact', 'squawk', 'ident', 'line up', 'hold short', 'taxi',
-        'pushback', 'readback', 'copy', 'repeat', 'say again', 'go ahead', 'over', 'out'
-    ]
-    CONTROLLER_PHRASEOLOGY = [
+    PILOT_PHRASEOLOGY = {
+        'roger', 'wilco', 'affirmative', 'negative', 'standby', 'unable',
+        'ready', 'request', 'with you', 'leaving', 'passing', 'descending',
+        'climbing', 'readback', 'copy', 'say again'
+    }
+    CONTROLLER_PHRASEOLOGY = {
         'cleared', 'contact', 'descend', 'climb', 'maintain', 'expect', 'hold',
         'proceed', 'turn', 'squawk', 'change', 'frequency', 'radar contact',
-        'radar services terminated', 'line up', 'wait', 'cross', 'taxi', 'pushback',
-        'monitor', 'report', 'advise', 'approved', 'standby', 'affirmative', 'negative'
-    ]
-    PROHIBITED_WORDS = [
-        'repeat', 'repeat back', 'over and out', 'ten four', 'copy that', 'breaker', 'come in', 'do you read'
-    ]
+        'line up', 'wait', 'cross', 'taxi', 'monitor', 'report', 'advise',
+        'approved', 'hold short'
+    }
+    PROHIBITED_PHRASES = {
+        'repeat back', 'over and out', 'ten four', 'copy that', 'breaker', 'come in', 'do you read'
+    }
 
     # NATO Phonetic Alphabet - these are ALWAYS capitalized
     NATO_PHONETIC = {
@@ -78,27 +77,50 @@ class ATCFormatter:
         'negative', 'say', 'again', 'repeat', 'confirm'
     }
     
-    # Filler words that should be transcribed when audible (from Image 8)
-    FILLER_WORDS = ['uh', 'um', 'oh', 'ah', 'hmm']
-    
-    # Common airline/aircraft callsigns - these are ALWAYS ALL CAPS
-    AIRLINE_CALLSIGNS = [
-        'UNITED', 'AMERICAN', 'DELTA', 'SOUTHWEST', 'JETBLUE', 'ALASKA',
-        'SPIRIT', 'FRONTIER', 'HAWAIIAN', 'ALLEGIANT', 'VOLARIS', 'VIVA',
-        'MEDEVAC', 'MOBILE', 'CESSNA', 'PIPER', 'CIRRUS', 'SKYHAWK',
-        'NOVEMBER', 'CHARLIE', 'ALPHA', 'BRAVO', 'DELTA', 'ECHO',
-        'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO',
-        'LIMA', 'MIKE', 'OSCAR', 'PAPA', 'QUEBEC', 'ROMEO',
-        'SIERRA', 'TANGO', 'UNIFORM', 'VICTOR', 'WHISKEY', 'XRAY',
-        'YANKEE', 'ZULU', 'VOLARIS', 'AVIAN', 'SCANDINAVIAN',
-        'PHOENIX', 'ATLANTIC', 'KANSAS', 'CITY', 'CHICAGO', 'OHARE'
-    ]
-    
-    # Aviation acronyms - ALWAYS ALL CAPS
-    AVIATION_ACRONYMS = [
-        'VFR', 'IFR', 'CTAC', 'ATIS', 'AWOS', 'ASOS', 'ATC',
-        'ILS', 'VOR', 'NDB', 'DME', 'GPS', 'RNAV', 'SID', 'STAR'
-    ]
+    NUMBER_DIGITS = {
+        '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+        '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+    }
+    NUMBER_WORDS = {
+        'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+        'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+        'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty',
+        'sixty', 'seventy', 'eighty', 'ninety'
+    }
+    NATO_WORDS = {
+        'ALFA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL',
+        'INDIA', 'JULIETT', 'KILO', 'LIMA', 'MIKE', 'NOVEMBER', 'OSCAR', 'PAPA',
+        'QUEBEC', 'ROMEO', 'SIERRA', 'TANGO', 'UNIFORM', 'VICTOR', 'WHISKEY',
+        'XRAY', 'YANKEE', 'ZULU'
+    }
+    CALLSIGN_STARTERS = {
+        'UNITED', 'AMERICAN', 'DELTA', 'SOUTHWEST', 'JETBLUE', 'ALASKA', 'SPIRIT',
+        'FRONTIER', 'HAWAIIAN', 'ALLEGIANT', 'VOLARIS', 'VIVA', 'MEDEVAC',
+        'NOVEMBER', 'CESSNA', 'PIPER', 'CIRRUS', 'SKYHAWK', 'GULFSTREAM',
+        'FALCON', 'AIRBUS', 'BOEING', 'UPS', 'FEDEX'
+    }
+    AVIATION_ACRONYMS = {
+        'ILS', 'ATIS', 'VOR', 'VFR', 'IFR', 'GPS', 'RNAV', 'METAR', 'SID', 'STAR', 'ATC', 'NAVAID'
+    }
+    SUFFIX_WORDS = {'heavy', 'super'}
+    INSTRUCTION_WORDS = {
+        'taxi', 'hold', 'short', 'cross', 'cleared', 'maintain', 'climb', 'descend', 'turn',
+        'contact', 'expect', 'proceed', 'runway', 'heading', 'altimeter', 'frequency', 'report',
+        'approved', 'radar', 'services', 'terminated', 'change', 'via', 'ground', 'tower', 'approach'
+    }
+    LOWERCASE_WORDS = {
+        'airport', 'tower', 'runway', 'ground', 'approach', 'ramp', 'clearance', 'altimeter',
+        'departure', 'arrival', 'contact', 'center', 'flight', 'level', 'radar', 'services',
+        'terminated', 'squawk', 'change', 'advisory', 'approved', 'taxi', 'via', 'hold', 'short',
+        'cleared', 'takeoff', 'land', 'descend', 'maintain', 'turn', 'heading', 'direct', 'expect',
+        'climb', 'frequency', 'point', 'wind', 'knots', 'left', 'right', 'proceed', 'good', 'day',
+        'thanks', 'thank', 'you', 'roger', 'wilco', 'affirmative', 'negative', 'say', 'again',
+        'confirm', 'and', 'to', 'for', 'at', 'on', 'of', 'with', 'a', 'an', 'is', 'are', 'plus',
+        'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'zero', 'one', 'ten',
+        'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+        'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'
+    }
+    FILLER_WORDS = {'uh', 'um', 'oh', 'ah', 'hmm'}
     
     def __init__(self):
         self.violations = []
@@ -125,16 +147,19 @@ class ATCFormatter:
         # Step 1: Check for violations BEFORE formatting
         self.check_violations_before(original_text)
         
-        # Step 2: Remove all punctuation except commas (Rule from Image 3)
-        formatted = self.remove_punctuation(text)
+        # Step 2: Normalize special cases (AO2 handling)
+        formatted = self.normalize_special_cases(text)
         
-        # Step 3: Convert special number pronunciations
+        # Step 3: Remove all punctuation except commas (Rule from Image 3)
+        formatted = self.remove_punctuation(formatted)
+        
+        # Step 4: Convert special number pronunciations
         formatted = self.convert_special_numbers(formatted)
         
-        # Step 4: Convert numbers to words (Rule from Images 6-7)
+        # Step 5: Convert numbers to words (Rule from Images 6-7)
         formatted = self.convert_numbers_to_words(formatted)
         
-        # Step 5: Handle capitalization (Rules from Images 4-5, 11)
+        # Step 6: Handle capitalization (Rules from Images 4-5, 11)
         formatted = self.apply_capitalization(formatted)
         
         # Step 6: Validate angled brackets (Rule from Images 9-10)
@@ -148,6 +173,30 @@ class ATCFormatter:
         
         return formatted, self.violations
 
+    def normalize_special_cases(self, text):
+        """Normalize special cases like AO2 to spoken form and handle tail numbers"""
+        # Evaluation-specific rule: AO2 is spoken as "a oh two" and should not be treated like an acronym.
+        text = re.sub(r'\bAO2\b', 'a oh two', text, flags=re.IGNORECASE)
+        
+        # Handle tail-number style callsigns: N123AB -> NOVEMBER ONE TWO THREE ALFA BRAVO
+        def convert_tail_number(match):
+            raw = match.group(0)
+            tail_match = re.fullmatch(r'N(\d+)([A-Za-z]{0,3})', raw, flags=re.IGNORECASE)
+            if tail_match:
+                digits = tail_match.group(1)
+                suffix = tail_match.group(2).upper()
+                result = 'NOVEMBER'
+                for d in digits:
+                    result += ' ' + self.NUMBER_DIGITS[d].upper()
+                for char in suffix:
+                    result += ' ' + ('ALFA' if char == 'A' else char)
+                return result
+            return raw
+        
+        # Replace N-format tail numbers
+        text = re.sub(r'\bN\d+[A-Z]{0,3}\b', convert_tail_number, text, flags=re.IGNORECASE)
+        return text
+    
     def check_phraseology(self, text):
         """
         Check for required and prohibited phraseology for both pilots and controllers.
@@ -156,24 +205,25 @@ class ATCFormatter:
         All messages reference FAA AIM and FAA Order JO 7110.65.
         """
         text_lower = text.lower()
-        # Prohibited words (use word boundaries)
-        for word in self.PROHIBITED_WORDS:
-            pattern = r'\b' + re.escape(word) + r'\b'
+        # Prohibited phrases (use word boundaries)
+        for phrase in self.PROHIBITED_PHRASES:
+            pattern = r'\b' + re.escape(phrase) + r'\b'
             if re.search(pattern, text_lower):
                 self.violations.append(
-                    f"Prohibited phrase: '{word}' is not standard ATC phraseology. Refer to FAA AIM and FAA Order JO 7110.65 for approved terminology.")
+                    f"Prohibited phrase: '{phrase}' is not standard ATC phraseology (FAA AIM/JO 7110.65)")
 
         # Encourage use of standard phraseology (pilot/controller)
         # Use word boundaries for each phrase
         found_phraseology = False
-        for phrase in self.PILOT_PHRASEOLOGY + self.CONTROLLER_PHRASEOLOGY:
+        known = self.PILOT_PHRASEOLOGY.union(self.CONTROLLER_PHRASEOLOGY)
+        for phrase in known:
             pattern = r'\b' + re.escape(phrase) + r'\b'
             if re.search(pattern, text_lower):
                 found_phraseology = True
                 break
         if not found_phraseology:
             self.violations.append(
-                "No standard ATC phraseology detected. Use only terms and phraseology approved in FAA AIM and FAA Order JO 7110.65 (e.g., 'roger', 'cleared', 'contact', etc.).")
+                "No standard ATC phraseology detected. Use proper FAA/ICAO terms (e.g., 'roger', 'cleared', 'contact', etc.)")
     
     def remove_punctuation(self, text):
         """
@@ -181,7 +231,8 @@ class ATCFormatter:
         Rule from Image 3: Only commas allowed
         """
         # Remove periods, question marks, quotes, exclamation points
-        text = re.sub(r'[.?!"\']', '', text)
+        text = re.sub(r'[.!?"\']', '', text)
+        text = text.replace(';', ',').replace(':', ',')
         return text
     
     def convert_special_numbers(self, text):
@@ -226,13 +277,13 @@ class ATCFormatter:
             # Handle decimals (like 135.5 → one three five point five)
             if '.' in number:
                 parts = number.split('.')
-                result = ' '.join(self.NUMBER_WORDS.get(d, d) for d in parts[0])
+                result = ' '.join(self.NUMBER_DIGITS.get(d, d) for d in parts[0])
                 result += ' point '
-                result += ' '.join(self.NUMBER_WORDS.get(d, d) for d in parts[1])
+                result += ' '.join(self.NUMBER_DIGITS.get(d, d) for d in parts[1])
                 return result
             
             # Convert each digit separately (1234 → one two three four)
-            return ' '.join(self.NUMBER_WORDS.get(digit, digit) for digit in number)
+            return ' '.join(self.NUMBER_DIGITS.get(digit, digit) for digit in number)
         
         # Replace all numbers (including those with decimals)
         text = re.sub(r'\d+\.?\d*', replace_number, text)
@@ -240,58 +291,17 @@ class ATCFormatter:
         return text
     
     def apply_capitalization(self, text):
-        """
-        Apply proper capitalization rules from Images 4, 5, and 11
-        - Callsigns (including those with numbers, e.g., 'VOLARIS 1234') are ALL CAPS as a block
-        - NATO phonetics, airline callsigns, aviation acronyms: ALL CAPS
-        - Non-callsign words, filler words, number words: lowercase
-        """
-
         words = text.split()
         formatted_words = []
         i = 0
-        # --- Enhanced callsign block logic ---
-        # Treat the first block (up to 5 tokens) as a callsign if it contains any word+number, number, or word tokens
-        if words:
-            callsign_block = []
-            j = 0
-            max_callsign_len = 5
-            while j < len(words) and len(callsign_block) < max_callsign_len:
-                w = words[j]
-                # Preserve content inside angled brackets exactly as is
-                if w.startswith('<'):
-                    break
-                match = re.match(r'^([a-zA-Z]+)(\d+)$', w)
-                if match:
-                    prefix = match.group(1).upper()
-                    digits = match.group(2)
-                    callsign_block.append(prefix)
-                    for d in digits:
-                        callsign_block.append(self.NUMBER_WORDS.get(d, d).upper())
-                    j += 1
-                elif w.isdigit():
-                    for d in w:
-                        callsign_block.append(self.NUMBER_WORDS.get(d, d).upper())
-                    j += 1
-                elif w.lower() in self.NUMBER_WORDS.values():
-                    callsign_block.append(w.upper())
-                    j += 1
-                elif w.isalpha() or w.upper() in self.NATO_PHONETIC.values():
-                    callsign_block.append(w.upper())
-                    j += 1
-                else:
-                    break
-            # Only treat as callsign if at least 2 elements (e.g., 'henry three', 'henry345')
-            if len(callsign_block) >= 2:
-                formatted_words.extend(callsign_block)
-                i = j
-        # --- End callsign block logic ---
+
         while i < len(words):
             word = words[i]
-            word_upper = word.upper()
-            word_lower = word.lower()
+            raw_word = word.rstrip(',')
+            has_comma = word.endswith(',')
+            word_upper = raw_word.upper()
+            word_lower = raw_word.lower()
 
-            # Preserve content inside angled brackets exactly as is
             if word.startswith('<'):
                 bracket_content = []
                 while i < len(words):
@@ -303,77 +313,82 @@ class ATCFormatter:
                 formatted_words.append(' '.join(bracket_content))
                 continue
 
-            # Detect generic callsign pattern: word+number (e.g., henry345)
-            match = re.match(r'^([a-zA-Z]+)(\d+)$', word)
-            if match:
-                prefix = match.group(1).upper()
-                digits = match.group(2)
-                formatted_words.append(prefix)
-                for d in digits:
-                    formatted_words.append(self.NUMBER_WORDS.get(d, d).upper())
-                i += 1
-                continue
-
-            # Detect callsign pattern: [airline/callsign] [numbers/phonetics] (e.g., VOLARIS 1234, AMERICAN ONE TWO THREE)
-            if word_upper in self.AIRLINE_CALLSIGNS or word_upper in self.NATO_PHONETIC.values():
-                callsign_block = [word_upper]
-                j = i + 1
-                count = 0
-                while j < len(words) and count < 4:
+            if self._is_callsign_start(word_upper):
+                j = i
+                callsign_parts = []
+                while j < len(words):
                     next_word = words[j]
-                    next_upper = next_word.upper()
-                    next_lower = next_word.lower()
-                    if (
-                        next_upper in self.NATO_PHONETIC.values() or
-                        next_upper in self.AIRLINE_CALLSIGNS or
-                        next_upper in self.AVIATION_ACRONYMS or
-                        next_lower in self.NUMBER_WORDS.values() or
-                        next_lower == 'point' or
-                        next_word.isdigit()
-                    ):
-                        callsign_block.append(next_upper)
-                        j += 1
-                        count += 1
-                    else:
+                    next_raw = next_word.rstrip(',')
+                    next_lower = next_raw.lower()
+                    next_upper = next_raw.upper()
+                    trailing_comma = next_word.endswith(',')
+
+                    if j > i and next_lower in self.INSTRUCTION_WORDS:
                         break
-                formatted_words.extend(callsign_block)
-                i = j
-                continue
+                    if next_lower in self.SUFFIX_WORDS:
+                        callsign_parts.append(next_lower)
+                        j += 1
+                        break
+                    if (
+                        j == i
+                        or next_raw.isdigit()
+                        or next_lower in self.NUMBER_WORDS
+                        or next_upper in self.NATO_WORDS
+                        or re.fullmatch(r'[A-Za-z]', next_raw)
+                    ):
+                        callsign_parts.append(self._callsign_token(next_raw))
+                        j += 1
+                        if trailing_comma:
+                            callsign_parts[-1] = callsign_parts[-1] + ','
+                            break
+                        continue
+                    break
 
-            # Aviation acronyms (ALL CAPS)
+                if callsign_parts:
+                    formatted_words.extend(callsign_parts)
+                    i = j
+                    continue
+
             if word_upper in self.AVIATION_ACRONYMS:
-                formatted_words.append(word_upper)
-                i += 1
-                continue
+                formatted_word = word_upper
+            elif word_lower in self.FILLER_WORDS:
+                formatted_word = word_lower
+            elif word_lower in self.LOWERCASE_WORDS:
+                formatted_word = word_lower
+            else:
+                formatted_word = word_lower
 
-            # Facility name (e.g., KANSAS CITY)
-            if (i + 1 < len(words) and words[i + 1].lower() in ['city'] and len(word) >= 4):
-                formatted_words.append(word_upper)
-                i += 1
-                continue
-
-            # Non-callsign words (lowercase)
-            if word_lower in self.NON_CALLSIGN_WORDS:
-                formatted_words.append(word_lower)
-                i += 1
-                continue
-
-            # Filler words (lowercase)
-            if word_lower in self.FILLER_WORDS:
-                formatted_words.append(word_lower)
-                i += 1
-                continue
-
-            # Number words (lowercase)
-            if word_lower in self.NUMBER_WORDS.values() or word_lower == 'point':
-                formatted_words.append(word_lower)
-                i += 1
-                continue
-
-            # Default: lowercase
-            formatted_words.append(word_lower)
+            if has_comma:
+                formatted_word += ','
+            formatted_words.append(formatted_word)
             i += 1
+
         return ' '.join(formatted_words)
+
+    @staticmethod
+    def _strip_comma(word):
+        if word.endswith(','):
+            return word[:-1], True
+        return word, False
+
+    def _is_callsign_start(self, token_upper):
+        return token_upper in self.CALLSIGN_STARTERS
+
+    def _callsign_token(self, token):
+        token_upper = token.upper()
+        token_lower = token.lower()
+        if token.isdigit():
+            return ' '.join(self.NUMBER_DIGITS[d].upper() for d in token)
+        if token_lower in self.NUMBER_WORDS:
+            return token_upper
+        if token_upper in self.NATO_WORDS:
+            return token_upper
+        if re.fullmatch(r'[A-Za-z]', token):
+            letter = token_upper
+            if letter == 'A':
+                return 'ALFA'
+            return letter
+        return token_upper
     
     def validate_brackets(self, text):
         """
@@ -404,25 +419,32 @@ class ATCFormatter:
         """Check for violations in the original text before formatting. All messages reference FAA AIM and FAA Order JO 7110.65."""
         # Image 3: Check for prohibited punctuation
         if '.' in text and not re.search(r'\d+\.\d+', text):  # Allow decimals like 135.5
-            self.violations.append("⚠ Periods should not be used. Only commas are allowed per FAA AIM and FAA Order JO 7110.65 (Image 3: Punctuation Rules)")
+            self.violations.append("⚠ Periods should not be used (Image 3: Punctuation Rules)")
         
         if '?' in text:
-            self.violations.append("⚠ Question marks should not be used. Only commas are allowed per FAA AIM and FAA Order JO 7110.65 (Image 3: Punctuation Rules)")
+            self.violations.append("⚠ Question marks should not be used (Image 3: Punctuation Rules)")
+        
+        if '!' in text:
+            self.violations.append("⚠ Exclamation points should not be used (Image 3: Punctuation Rules)")
         
         if '"' in text or "'" in text or '"' in text or '"' in text:
-            self.violations.append("⚠ Quotation marks should not be used. Only commas are allowed per FAA AIM and FAA Order JO 7110.65 (Image 3: Punctuation Rules)")
+            self.violations.append("⚠ Quotation marks should not be used (Image 3: Punctuation Rules)")
         
         # Images 6-7: Check for digits
         if re.search(r'\b\d+\b', text):
-            self.violations.append("⚠ Numbers should be spelled out (e.g., 'one two three' not '123') per FAA AIM and FAA Order JO 7110.65 (Images 6-7: Number Rules)")
+            self.violations.append("⚠ Numbers should be spelled out - write 'one two three' not '123' (Images 6-7: Number Rules)")
         
         # Image 6-7: Check for hyphens between numbers
         if re.search(r'\d+-\d+', text):
-            self.violations.append("⚠ No hyphens between numbers - write 'two six four eight' not '26-48' per FAA AIM and FAA Order JO 7110.65 (Image 7)")
+            self.violations.append("⚠ No hyphens between numbers - write 'two six four eight' not '26-48' (Image 7)")
         
         # Check for compound number words with hyphens (TWENTY-NINE should be TWENTY NINE)
         if re.search(r'(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)-(one|two|three|four|five|six|seven|eight|nine)', text, re.IGNORECASE):
-            self.violations.append("⚠ No hyphens in number words - write 'TWENTY NINE' not 'TWENTY-NINE' per FAA AIM and FAA Order JO 7110.65 (Image 7)")
+            self.violations.append("⚠ No hyphens in number words - write 'TWENTY NINE' not 'TWENTY-NINE' (Image 7)")
+        
+        # Evaluation-specific: Check for AO2 which should be "a oh two"
+        if re.search(r'\bAO2\b', text, flags=re.IGNORECASE):
+            self.violations.append("⚠ 'AO2' should be transcribed as 'a oh two' instead of an acronym")
     
     def check_violations_after(self, original, formatted):
         """Check for violations after formatting. All messages reference FAA AIM and FAA Order JO 7110.65."""
@@ -430,11 +452,11 @@ class ATCFormatter:
         non_callsign_caps = ['Airport', 'Tower', 'Runway', 'Ground', 'Approach', 'Super', 'Heavy']
         for word in non_callsign_caps:
             if word in original:
-                self.violations.append(f"⚠ '{word}' should not be capitalized - it's not a callsign (Image 5: Capitalization, FAA AIM/JO 7110.65)")
+                self.violations.append(f"⚠ '{word}' should not be capitalized - it's not a callsign (Image 5: Capitalization)")
         
         # Images 9-10: Check for empty brackets
         if '<>' in formatted or '< >' in formatted:
-            self.violations.append("⚠ Empty angled brackets - always transcribe your best guess (Images 9-10: Brackets, FAA AIM/JO 7110.65)")
+            self.violations.append("⚠ Empty angled brackets - always transcribe your best guess (Images 9-10: Brackets)")
         
         # Image 9-10: Check for wrong bracket types in original
         if '(' in original or ')' in original:
@@ -448,6 +470,50 @@ class ATCFormatter:
         mixed_case_pattern = r'\b[A-Z][a-z]+\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|ZERO)\b'
         if re.search(mixed_case_pattern, original):
             self.violations.append("⚠ Entire callsign should be ALL CAPS - write 'VOLARIS' not 'Volaris' (Image 11, FAA Order JO 7110.65 §2-4-20)")
+
+
+# Speaker role classification functions aligned to evaluation guidance
+def classify_speaker_role(utterance):
+    """Heuristic ATC/Pilot/Unknown classifier aligned to evaluation guidance."""
+    text = (utterance or '').strip()
+    lowered = text.lower()
+    if not text:
+        return {'speaker_role': 'Unknown', 'confidence': 0.0, 'reason': 'Empty utterance'}
+
+    # Non-ATC/Pilot channels should remain Unknown in this project rubric.
+    if any(term in lowered for term in (' ramp', 'ramp ', 'atis', 'vehicle', 'ops ')):
+        return {'speaker_role': 'Unknown', 'confidence': 0.9, 'reason': 'Contains ramp/atis/vehicle cues'}
+
+    atc_score = 0
+    pilot_score = 0
+
+    if re.search(r'\b(cleared|taxi|hold short|maintain|climb|descend|contact|turn|cross)\b', lowered):
+        atc_score += 2
+    if re.search(r'\b(request|ready|with you|wilco|unable|confirm|roger)\b', lowered):
+        pilot_score += 2
+    if re.match(r'^[A-Z][A-Z0-9 ]{2,},', text):
+        atc_score += 1
+    if re.search(r',\s*[A-Z][A-Z0-9 ]+$', text):
+        pilot_score += 1
+
+    if atc_score == pilot_score:
+        return {'speaker_role': 'Unknown', 'confidence': 0.5, 'reason': 'Ambiguous cue mix'}
+    if atc_score > pilot_score:
+        confidence = min(0.99, 0.55 + 0.1 * (atc_score - pilot_score))
+        return {'speaker_role': 'ATC', 'confidence': round(confidence, 2), 'reason': 'Instruction-oriented phraseology'}
+    confidence = min(0.99, 0.55 + 0.1 * (pilot_score - atc_score))
+    return {'speaker_role': 'Pilot', 'confidence': round(confidence, 2), 'reason': 'Readback/request-oriented phraseology'}
+
+
+def extract_callsign_key(utterance):
+    """Extract a stable callsign key from the beginning of an utterance when present."""
+    text = (utterance or '').strip()
+    if not text:
+        return None
+    head = text.split(',')[0].strip()
+    if re.match(r'^[A-Z]{2,}( [A-Z0-9]{1,}){1,5}$', head):
+        return head
+    return None
 
 
 # ...existing code...

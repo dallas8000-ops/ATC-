@@ -1,1 +1,4 @@
 PyQt5>=5.15.0
+Flask>=3.0.0
+Werkzeug>=3.0.0
+faster-whisper>=1.1.0

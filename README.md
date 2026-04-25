@@ -16,6 +16,12 @@ A professional Windows-based application for transcribing Air Traffic Control (A
 - Applies proper capitalization rules
 - Maintains commas (the only allowed punctuation)
 
+### ✅ Audio To Text (Web App)
+- Upload an audio file and transcribe it to text
+- Capture speaker/system audio from the browser and transcribe it
+- Automatically runs the ATC formatter on transcribed text
+- Shows raw transcript and formatted transcript side by side for quick review/copy
+
 ### ✅ Callsign Detection & Validation
 - Identifies and capitalizes callsigns (airlines, tail numbers, NATO phonetics)
 - Recognizes common airline callsigns (UNITED, AMERICAN, DELTA, etc.)
@@ -72,6 +78,12 @@ pip install PyQt5
 python atc_transcription_app.py
 ```
 
+### Step 4: Run the Web App (Audio-to-Text + HTML UI)
+```bash
+python webapp/app.py
+```
+Open http://127.0.0.1:5000 in your browser.
+
 ## Usage
 
 ### Basic Workflow
@@ -81,6 +93,16 @@ python atc_transcription_app.py
 3. **Review the formatted output** in the right panel
 4. **Check for violations** in the "Violations" tab
 5. **Copy or save** your formatted transcript
+
+### Web Audio Workflow
+1. Start the web app: `python webapp/app.py`
+2. Open the page in a Chromium-based browser
+3. Use one of these options:
+  - `Upload Audio` to transcribe an existing recording
+  - `Record Mic` to capture microphone audio
+  - `Capture Speaker Audio` to capture tab/system playback audio
+4. Wait for transcription to complete
+5. Copy from `Formatted Transcript` and paste where needed
 
 ### Example
 

@@ -5,128 +5,177 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ATC Transcription Web App</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <style>
-        body { background: #f8f9fa; }
-        .container { max-width: 900px; margin-top: 40px; }
-        textarea { font-family: Consolas, monospace; }
-        .violation { color: #c00; font-weight: bold; }
-        .audio-section { margin-top: 2em; }
+        body {
+            background: linear-gradient(135deg, #f4f7fb 0%, #e9f2ff 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1100px;
+            margin-top: 28px;
+            margin-bottom: 28px;
+        }
+        textarea {
+            font-family: Consolas, monospace;
+            font-size: 0.95rem;
+        }
+        .violation {
+            color: #c00;
+            font-weight: bold;
+        }
+        .panel-card {
+            border: 0;
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(22, 60, 120, 0.08);
+        }
+        .small-help {
+            font-size: 0.86rem;
+            color: #5f6b7a;
+        }
+        .audio-section {
+            margin-top: 1.5em;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1 class="mb-4">ATC Transcription Tool (Web)</h1>
-    <form id="transcription-form">
-        <div class="mb-3">
-            <label for="inputText" class="form-label">Input Transcript</label>
-            <textarea class="form-control" id="inputText" rows="4" placeholder="Enter ATC transmission here..."></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary">Format Transcript</button>
-    </form>
-    <div class="mt-4">
-        <div class="row">
-            <div class="col-md-6">
-                <form id="transcription-form">
+    <h1 class="mb-3">ATC Transcription Tool</h1>
+    <p class="small-help mb-4">
+        Format transcripts to ATC standards and classify speaker roles as ATC, Pilot, or Unknown.
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card panel-card">
+                <div class="card-body">
+                    <form id="transcription-form">
                         <div class="mb-3">
-                                <label for="inputText" class="form-label">Input Transcript</label>
-                                <textarea class="form-control" id="inputText" rows="8" placeholder="Enter your ATC transcription here...\n\nExample:\nNOVEMBER 998 BRAVO BRAVO, radar services terminated. Squawk VFR, change to advisory is approved.\n\nThe app will automatically format it according to ATC standards."></textarea>
+                            <label for="inputText" class="form-label">Input Transcript</label>
+                            <textarea class="form-control" id="inputText" rows="10" placeholder="Enter your ATC transcript here...
+
+Example:
+AMERICAN 297 runway two seven left cleared to land"></textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary">Format Transcript</button>
-                </form>
-                <div class="audio-section mt-4">
-                        <h5 class="mb-3">Audio Upload & Playback</h5>
-                        <div class="row g-2 align-items-center">
-                                <div class="col-auto">
-                                        <form id="audio-upload-form" class="d-flex flex-row align-items-center gap-2">
-                                                <input type="file" id="audioFile" accept="audio/*" class="form-control form-control-sm">
-                                                <button type="submit" class="btn btn-secondary btn-sm">Upload Audio</button>
-                                        </form>
-                                </div>
-                                <div class="col-auto">
-                                        <button id="recordBtn" class="btn btn-danger btn-sm">Start Recording</button>
-                                        <button id="stopBtn" class="btn btn-secondary btn-sm" disabled>Stop</button>
-                                </div>
-                                <div class="col-auto">
-                                        <span id="recordingStatus" style="margin-left:1em;color:#c00;"></span>
-                                </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary">Format Transcript</button>
+                            <button type="button" class="btn btn-outline-dark" id="classifyBtn">Classify Speaker</button>
                         </div>
-                        <audio id="audioPlayer" controls style="width:100%; margin-top:1em; display:none;"></audio>
+                    </form>
+
+                    <div class="audio-section">
+                        <h6 class="mb-2">Audio Upload, Capture, and Transcription</h6>
+                        <form id="audio-upload-form" class="d-flex flex-wrap gap-2">
+                            <input type="file" id="audioFile" accept="audio/*" class="form-control form-control-sm" style="max-width: 310px;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Upload Audio</button>
+                            <button id="recordBtn" class="btn btn-danger btn-sm" type="button">Record Mic</button>
+                            <button id="captureSystemBtn" class="btn btn-outline-primary btn-sm" type="button">Capture Speaker Audio</button>
+                            <button id="stopBtn" class="btn btn-outline-secondary btn-sm" type="button" disabled>Stop</button>
+                        </form>
+                        <div id="recordingStatus" class="small-help mt-2"></div>
+                        <audio id="audioPlayer" controls style="width:100%; margin-top:0.75em; display:none;"></audio>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <ul class="nav nav-tabs" id="outputTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="formatted-tab" data-bs-toggle="tab" data-bs-target="#formatted" type="button" role="tab">Formatted Output</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="violations-tab" data-bs-toggle="tab" data-bs-target="#violations" type="button" role="tab">Violations</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="rules-tab" data-bs-toggle="tab" data-bs-target="#rules" type="button" role="tab">Formatting Rules</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="editor-tab" data-bs-toggle="tab" data-bs-target="#editor" type="button" role="tab">Rules Editor</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="examples-tab" data-bs-toggle="tab" data-bs-target="#examples" type="button" role="tab">Learn from Examples</button>
-                    </li>
-                </ul>
-                <div class="tab-content border border-top-0 p-3 bg-white" id="outputTabsContent" style="min-height:300px;">
-                    <div class="tab-pane fade show active" id="formatted" role="tabpanel">
-                        <label class="form-label fw-bold">Formatted Transcript:</label>
-                        <textarea class="form-control" id="outputText" rows="6" readonly></textarea>
-                        <button class="btn btn-outline-secondary btn-sm mt-2" id="copyBtn">Copy to Clipboard</button>
-                    </div>
-                    <div class="tab-pane fade" id="violations" role="tabpanel">
-                        <label class="form-label fw-bold">Violations:</label>
-                        <ul id="violationsList"></ul>
-                    </div>
-                    <div class="tab-pane fade" id="rules" role="tabpanel">
-                        <label class="form-label fw-bold">Formatting Rules:</label>
-                        <div id="rulesContent">(Formatting rules will appear here.)</div>
-                    </div>
-                    <div class="tab-pane fade" id="editor" role="tabpanel">
-                        <label class="form-label fw-bold">Rules Editor:</label>
-                        <form id="rulesForm">
-                            <div class="mb-2">
-                                <label for="rulesJson" class="form-label">Edit Custom Rules (JSON):</label>
-                                <textarea class="form-control" id="rulesJson" rows="8"></textarea>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card panel-card">
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="outputTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="formatted-tab" data-bs-toggle="tab" data-bs-target="#formatted" type="button" role="tab">Formatted Output</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="violations-tab" data-bs-toggle="tab" data-bs-target="#violations" type="button" role="tab">Violations</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="rules-tab" data-bs-toggle="tab" data-bs-target="#rules" type="button" role="tab">Formatting Rules</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="speaker-tab" data-bs-toggle="tab" data-bs-target="#speaker" type="button" role="tab">Speaker Role</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="editor-tab" data-bs-toggle="tab" data-bs-target="#editor" type="button" role="tab">Rules Editor</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="examples-tab" data-bs-toggle="tab" data-bs-target="#examples" type="button" role="tab">Learn from Examples</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content border border-top-0 p-3 bg-white" id="outputTabsContent" style="min-height:300px;">
+                        <div class="tab-pane fade show active" id="formatted" role="tabpanel">
+                            <label class="form-label fw-bold">Raw Transcript:</label>
+                            <textarea class="form-control mb-2" id="rawText" rows="4" readonly></textarea>
+                            <label class="form-label fw-bold">Formatted Transcript:</label>
+                            <textarea class="form-control" id="outputText" rows="6" readonly></textarea>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-outline-secondary btn-sm" id="copyBtn" type="button">Copy Formatted</button>
+                                <button class="btn btn-outline-secondary btn-sm" id="copyRawBtn" type="button">Copy Raw</button>
                             </div>
-                            <button type="submit" class="btn btn-primary btn-sm">Save Rules</button>
-                            <span id="rulesSaveStatus" class="ms-2"></span>
-                        </form>
-                    </div>
-                    <div class="tab-pane fade" id="examples" role="tabpanel">
-                        <label class="form-label fw-bold">Learn from Examples:</label>
-                        <form id="exampleForm" class="mb-3">
-                            <div class="mb-2">
-                                <label for="exampleInput" class="form-label">Input Transcript Example:</label>
-                                <textarea class="form-control" id="exampleInput" rows="2"></textarea>
+                        </div>
+
+                        <div class="tab-pane fade" id="violations" role="tabpanel">
+                            <label class="form-label fw-bold">Violations:</label>
+                            <ul id="violationsList"></ul>
+                        </div>
+
+                        <div class="tab-pane fade" id="rules" role="tabpanel">
+                            <label class="form-label fw-bold">Formatting Rules:</label>
+                            <div id="rulesContent">Only commas are allowed punctuation, callsigns are ALL CAPS, and non-callsign words stay lowercase.</div>
+                        </div>
+
+                        <div class="tab-pane fade" id="speaker" role="tabpanel">
+                            <label class="form-label fw-bold">Speaker Classification:</label>
+                            <div class="mb-2 small-help">Assign role for this utterance using evaluation cues.</div>
+                            <div id="speakerRoleResult" class="border rounded p-2 bg-light">No classification yet.</div>
+                        </div>
+
+                        <div class="tab-pane fade" id="editor" role="tabpanel">
+                            <label class="form-label fw-bold">Rules Editor:</label>
+                            <form id="rulesForm">
+                                <div class="mb-2">
+                                    <label for="rulesJson" class="form-label">Edit Custom Rules (JSON):</label>
+                                    <textarea class="form-control" id="rulesJson" rows="8"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">Save Rules</button>
+                                <span id="rulesSaveStatus" class="ms-2"></span>
+                            </form>
+                        </div>
+
+                        <div class="tab-pane fade" id="examples" role="tabpanel">
+                            <label class="form-label fw-bold">Learn from Examples:</label>
+                            <form id="exampleForm" class="mb-3">
+                                <div class="mb-2">
+                                    <label for="exampleInput" class="form-label">Input Transcript Example:</label>
+                                    <textarea class="form-control" id="exampleInput" rows="2"></textarea>
+                                </div>
+                                <div class="mb-2">
+                                    <label for="exampleOutput" class="form-label">Correct Formatted Output:</label>
+                                    <textarea class="form-control" id="exampleOutput" rows="2"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">Submit Example</button>
+                                <span id="exampleSaveStatus" class="ms-2"></span>
+                            </form>
+                            <div>
+                                <label class="form-label">Saved Examples:</label>
+                                <ul id="examplesList" class="list-group"></ul>
                             </div>
-                            <div class="mb-2">
-                                <label for="exampleOutput" class="form-label">Correct Formatted Output:</label>
-                                <textarea class="form-control" id="exampleOutput" rows="2"></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-sm">Submit Example</button>
-                            <span id="exampleSaveStatus" class="ms-2"></span>
-                        </form>
-                        <div>
-                            <label class="form-label">Saved Examples:</label>
-                            <ul id="examplesList" class="list-group"></ul>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 </div>
+
 <script>
-// --- Rules Editor logic ---
 async function loadRules() {
     const res = await fetch('/api/rules');
     const data = await res.json();
     document.getElementById('rulesJson').value = JSON.stringify(data, null, 2);
 }
+
 document.getElementById('rulesForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const rulesText = document.getElementById('rulesJson').value;
@@ -137,18 +186,14 @@ document.getElementById('rulesForm').addEventListener('submit', async function(e
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(rules)
         });
-        if (res.ok) {
-            document.getElementById('rulesSaveStatus').textContent = 'Saved!';
-        } else {
-            document.getElementById('rulesSaveStatus').textContent = 'Error saving.';
-        }
+        document.getElementById('rulesSaveStatus').textContent = res.ok ? 'Saved!' : 'Error saving.';
     } catch (err) {
         document.getElementById('rulesSaveStatus').textContent = 'Invalid JSON.';
     }
 });
+
 document.getElementById('editor-tab').addEventListener('click', loadRules);
 
-// --- Learn from Examples logic ---
 async function loadExamples() {
     const res = await fetch('/api/examples');
     const data = await res.json();
@@ -161,6 +206,7 @@ async function loadExamples() {
         list.appendChild(li);
     });
 }
+
 document.getElementById('exampleForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const input = document.getElementById('exampleInput').value;
@@ -179,12 +225,14 @@ document.getElementById('exampleForm').addEventListener('submit', async function
         document.getElementById('exampleSaveStatus').textContent = 'Error saving.';
     }
 });
+
 document.getElementById('examples-tab').addEventListener('click', loadExamples);
-// Handle transcription formatting
+
 const form = document.getElementById('transcription-form');
 form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const inputText = document.getElementById('inputText').value;
+    document.getElementById('rawText').value = inputText;
     const res = await fetch('/api/format', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,10 +240,10 @@ form.addEventListener('submit', async function(e) {
     });
     const data = await res.json();
     document.getElementById('outputText').value = data.formatted;
-    // Switch to Formatted Output tab
-    var tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));
+
+    const tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));
     tab.show();
-    // Violations
+
     const violationsList = document.getElementById('violationsList');
     violationsList.innerHTML = '';
     if (data.violations && data.violations.length > 0) {
@@ -207,23 +255,84 @@ form.addEventListener('submit', async function(e) {
         });
     } else {
         const li = document.createElement('li');
-        li.textContent = '✓ No violations found - great job!';
+        li.textContent = 'No violations found';
         li.style.color = 'green';
         violationsList.appendChild(li);
     }
 });
-// Copy to clipboard
+
+document.getElementById('classifyBtn').addEventListener('click', async function() {
+    const inputText = document.getElementById('inputText').value;
+    const res = await fetch('/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: inputText })
+    });
+    const data = await res.json();
+    const roleBlock = document.getElementById('speakerRoleResult');
+    roleBlock.innerHTML = `<b>Role:</b> ${data.speaker_role}<br/><b>Confidence:</b> ${data.confidence}<br/><b>Reason:</b> ${data.reason}`;
+    const tab = new bootstrap.Tab(document.querySelector('#speaker-tab'));
+    tab.show();
+});
+
 document.getElementById('copyBtn').addEventListener('click', function() {
     const outputText = document.getElementById('outputText');
-    outputText.select();
-    document.execCommand('copy');
+    navigator.clipboard.writeText(outputText.value);
 });
-// Handle audio upload and playback
+
+document.getElementById('copyRawBtn').addEventListener('click', function() {
+    const rawText = document.getElementById('rawText');
+    navigator.clipboard.writeText(rawText.value);
+});
+
+async function transcribeByFilename(filename) {
+    const status = document.getElementById('recordingStatus');
+    status.textContent = 'Transcribing audio...';
+
+    const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+        status.textContent = data.error || 'Transcription failed';
+        return;
+    }
+
+    document.getElementById('rawText').value = data.raw_text || '';
+    document.getElementById('inputText').value = data.raw_text || '';
+    document.getElementById('outputText').value = data.formatted || '';
+
+    const violationsList = document.getElementById('violationsList');
+    violationsList.innerHTML = '';
+    if (data.violations && data.violations.length > 0) {
+        data.violations.forEach(v => {
+            const li = document.createElement('li');
+            li.textContent = v;
+            li.className = 'violation';
+            violationsList.appendChild(li);
+        });
+    } else {
+        const li = document.createElement('li');
+        li.textContent = 'No violations found';
+        li.style.color = 'green';
+        violationsList.appendChild(li);
+    }
+
+    status.textContent = 'Transcription complete';
+    const tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));
+    tab.show();
+}
+
 const audioForm = document.getElementById('audio-upload-form');
 audioForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     const fileInput = document.getElementById('audioFile');
-    if (!fileInput.files.length) return;
+    if (!fileInput.files.length) {
+        return;
+    }
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     const res = await fetch('/api/upload', { method: 'POST', body: formData });
@@ -233,13 +342,15 @@ audioForm.addEventListener('submit', async function(e) {
         audioPlayer.src = `/uploads/${data.filename}`;
         audioPlayer.style.display = 'block';
         audioPlayer.load();
+        await transcribeByFilename(data.filename);
     }
 });
-// Microphone recording logic
+
 let mediaRecorder;
 let audioChunks = [];
 const recordBtn = document.getElementById('recordBtn');
 const stopBtn = document.getElementById('stopBtn');
+const captureSystemBtn = document.getElementById('captureSystemBtn');
 const recordingStatus = document.getElementById('recordingStatus');
 
 recordBtn.addEventListener('click', async function() {
@@ -247,18 +358,23 @@ recordBtn.addEventListener('click', async function() {
         alert('Your browser does not support audio recording.');
         return;
     }
+
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-        mediaRecorder.ondataavailable = e => {
-            if (e.data.size > 0) audioChunks.push(e.data);
+
+        mediaRecorder.ondataavailable = function(e) {
+            if (e.data.size > 0) {
+                audioChunks.push(e.data);
+            }
         };
-        mediaRecorder.onstop = async () => {
+
+        mediaRecorder.onstop = async function() {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            // Upload the recorded audio
             const formData = new FormData();
             formData.append('file', audioBlob, 'recording.webm');
+
             recordingStatus.textContent = 'Uploading...';
             const res = await fetch('/api/upload', { method: 'POST', body: formData });
             const data = await res.json();
@@ -267,11 +383,12 @@ recordBtn.addEventListener('click', async function() {
                 audioPlayer.src = `/uploads/${data.filename}`;
                 audioPlayer.style.display = 'block';
                 audioPlayer.load();
-                recordingStatus.textContent = 'Recording uploaded!';
+                await transcribeByFilename(data.filename);
             } else {
-                recordingStatus.textContent = 'Upload failed.';
+                recordingStatus.textContent = 'Upload failed';
             }
         };
+
         mediaRecorder.start();
         recordBtn.disabled = true;
         stopBtn.disabled = false;
@@ -281,10 +398,58 @@ recordBtn.addEventListener('click', async function() {
     }
 });
 
+captureSystemBtn.addEventListener('click', async function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('System audio capture is not supported in this browser.');
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = function(e) {
+            if (e.data.size > 0) {
+                audioChunks.push(e.data);
+            }
+        };
+
+        mediaRecorder.onstop = async function() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'speaker_capture.webm');
+            recordingStatus.textContent = 'Uploading speaker capture...';
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (data.filename) {
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.src = `/uploads/${data.filename}`;
+                audioPlayer.style.display = 'block';
+                audioPlayer.load();
+                await transcribeByFilename(data.filename);
+            } else {
+                recordingStatus.textContent = 'Upload failed';
+            }
+
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        recordBtn.disabled = true;
+        captureSystemBtn.disabled = true;
+        stopBtn.disabled = false;
+        recordingStatus.textContent = 'Capturing speaker audio...';
+    } catch (err) {
+        alert('Could not capture speaker audio: ' + err.message);
+    }
+});
+
 stopBtn.addEventListener('click', function() {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
         recordBtn.disabled = false;
+        captureSystemBtn.disabled = false;
         stopBtn.disabled = true;
         recordingStatus.textContent = 'Processing...';
     }
