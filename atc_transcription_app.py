@@ -6,13 +6,110 @@ following FAA/ICAO phraseology and formatting standards.
 
 import sys
 import re
+import os
+import tempfile
+import numpy as np
+from threading import Thread
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTextEdit, QPushButton, QLabel, 
                              QFileDialog, QSplitter, QListWidget, QTabWidget,
                              QGroupBox, QMessageBox, QStatusBar, QToolBar,
                              QAction, QMenuBar, QMenu)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QSyntaxHighlighter, QTextCursor
+
+
+class AudioRecorder(QThread):
+    """Worker thread for audio recording and transcription"""
+    transcription_ready = pyqtSignal(str)  # Emits transcribed text
+    recording_finished = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self):
+        super().__init__()
+        self.is_recording = False
+        self.sample_rate = 16000
+        self.audio_data = []
+        self.transcriber = None
+        self._load_transcriber()
+    
+    def _load_transcriber(self):
+        """Load the transcriber lazily"""
+        try:
+            from faster_whisper import WhisperModel
+            self.transcriber = WhisperModel("base", device="cpu", compute_type="int8")
+        except Exception as e:
+            self.error_occurred.emit(f"Transcriber not available: {e}")
+    
+    def start_recording(self):
+        """Start recording audio"""
+        try:
+            import sounddevice as sd
+            self.is_recording = True
+            self.audio_data = []
+            
+            def audio_callback(indata, frames, time_info, status):
+                if status:
+                    print(f"Audio status: {status}")
+                # Copy audio data (convert to mono if needed)
+                audio_chunk = indata[:, 0] if indata.shape[1] > 1 else indata[:, 0]
+                self.audio_data.append(audio_chunk.copy())
+            
+            # Start recording stream
+            self.stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                callback=audio_callback,
+                blocksize=4096
+            )
+            self.stream.start()
+        except ImportError:
+            self.error_occurred.emit("sounddevice not installed. Run: pip install sounddevice")
+    
+    def stop_recording(self):
+        """Stop recording and transcribe"""
+        self.is_recording = False
+        try:
+            self.stream.stop()
+            self.stream.close()
+            
+            if not self.audio_data:
+                self.error_occurred.emit("No audio recorded")
+                return
+            
+            # Concatenate audio data
+            audio_array = np.concatenate(self.audio_data, axis=0)
+            
+            # Save to temporary file for transcription
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+            
+            try:
+                import soundfile as sf
+                sf.write(tmp_path, audio_array, self.sample_rate)
+                
+                # Transcribe
+                if self.transcriber is None:
+                    self.error_occurred.emit("Transcriber not loaded")
+                    return
+                
+                segments, _ = self.transcriber.transcribe(
+                    tmp_path,
+                    language="en",
+                    vad_filter=True,
+                    condition_on_previous_text=False
+                )
+                text = " ".join(seg.text.strip() for seg in segments if seg.text)
+                self.transcription_ready.emit(text)
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+        except ImportError:
+            self.error_occurred.emit("soundfile not installed. Run: pip install soundfile")
+        except Exception as e:
+            self.error_occurred.emit(f"Transcription error: {e}")
+        finally:
+            self.recording_finished.emit()
 
 
 class ATCFormatter:
@@ -601,6 +698,8 @@ class ATCTranscriptionApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.formatter = ATCFormatter()
+        self.audio_recorder = None
+        self.is_recording = False
         self.init_ui()
     
     def init_ui(self):
@@ -687,6 +786,18 @@ class ATCTranscriptionApp(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
         
+        # Recording controls
+        self.record_button = QPushButton("🎙️ Record")
+        self.record_button.clicked.connect(self.start_recording)
+        toolbar.addWidget(self.record_button)
+        
+        self.stop_button = QPushButton("⏹️ Stop")
+        self.stop_button.clicked.connect(self.stop_recording)
+        self.stop_button.setEnabled(False)
+        toolbar.addWidget(self.stop_button)
+        
+        toolbar.addSeparator()
+        
         format_action = QAction('Auto-Format', self)
         format_action.triggered.connect(self.auto_format)
         toolbar.addAction(format_action)
@@ -696,6 +807,56 @@ class ATCTranscriptionApp(QMainWindow):
         clear_action = QAction('Clear', self)
         clear_action.triggered.connect(self.clear_all)
         toolbar.addAction(clear_action)
+    
+    def start_recording(self):
+        """Start audio recording"""
+        if self.is_recording:
+            return
+        
+        self.is_recording = True
+        self.record_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.statusBar.showMessage("Recording... (click Stop to end)")
+        
+        # Create and start recorder
+        self.audio_recorder = AudioRecorder()
+        self.audio_recorder.transcription_ready.connect(self.on_transcription_ready)
+        self.audio_recorder.error_occurred.connect(self.on_recording_error)
+        self.audio_recorder.recording_finished.connect(self.on_recording_finished)
+        self.audio_recorder.start_recording()
+    
+    def stop_recording(self):
+        """Stop audio recording and transcribe"""
+        if not self.is_recording or self.audio_recorder is None:
+            return
+        
+        self.is_recording = False
+        self.record_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.statusBar.showMessage("Processing audio... please wait")
+        
+        self.audio_recorder.stop_recording()
+    
+    def on_transcription_ready(self, text):
+        """Handle transcribed text"""
+        self.input_text.setPlainText(text)
+        self.statusBar.showMessage(f"Transcribed: {len(text.split())} words")
+        # Auto-format
+        self.auto_format()
+    
+    def on_recording_error(self, error_msg):
+        """Handle recording errors"""
+        QMessageBox.warning(self, "Recording Error", error_msg)
+        self.statusBar.showMessage(f"Error: {error_msg}")
+        self.is_recording = False
+        self.record_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+    
+    def on_recording_finished(self):
+        """Handle recording finished"""
+        self.record_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.statusBar.showMessage("Ready")
     
     def create_input_panel(self):
         """Create the input panel"""
