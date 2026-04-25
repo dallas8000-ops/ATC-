@@ -30,6 +30,7 @@ class AudioRecorder(QThread):
         self.is_recording = False
         self.sample_rate = 16000
         self.audio_data = []
+        self.stream = None
         self.transcriber = None
         self._load_transcriber()
     
@@ -45,33 +46,49 @@ class AudioRecorder(QThread):
         """Start recording audio"""
         try:
             import sounddevice as sd
+            print("[DEBUG] Starting audio recording...")
             self.is_recording = True
             self.audio_data = []
             
             def audio_callback(indata, frames, time_info, status):
                 if status:
-                    print(f"Audio status: {status}")
-                # Copy audio data (convert to mono if needed)
-                audio_chunk = indata[:, 0] if indata.shape[1] > 1 else indata[:, 0]
-                self.audio_data.append(audio_chunk.copy())
+                    print(f"[DEBUG] Audio status: {status}")
+                try:
+                    audio_chunk = indata[:, 0] if indata.shape[1] > 1 else indata[:, 0]
+                    self.audio_data.append(audio_chunk.copy())
+                except Exception as e:
+                    print(f"[DEBUG] Callback error: {e}")
             
-            # Start recording stream
             self.stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
                 callback=audio_callback,
-                blocksize=4096
+                blocksize=4096,
+                device=None
             )
             self.stream.start()
-        except ImportError:
-            self.error_occurred.emit("sounddevice not installed. Run: pip install sounddevice")
+            print("[DEBUG] Recording stream started")
+        except ImportError as e:
+            print(f"[ERROR] Import: {e}")
+            self.error_occurred.emit(f"sounddevice not installed")
+        except Exception as e:
+            print(f"[ERROR] Recording start: {e}")
+            self.error_occurred.emit(f"Recording error: {e}")
     
     def stop_recording(self):
         """Stop recording and transcribe"""
         self.is_recording = False
         try:
+            print("[DEBUG] Stopping recording...")
+            if self.stream is None:
+                print("[ERROR] Stream is None")
+                self.error_occurred.emit("No recording stream active")
+                self.recording_finished.emit()
+                return
+            
             self.stream.stop()
             self.stream.close()
+            print(f"[DEBUG] Stopped, {len(self.audio_data)} chunks captured")
             
             if not self.audio_data:
                 self.error_occurred.emit("No audio recorded")
