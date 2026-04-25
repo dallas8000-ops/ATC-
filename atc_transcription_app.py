@@ -8,13 +8,18 @@ import sys
 import re
 import os
 import tempfile
+import time
+import subprocess
+import json
+import shutil
+from datetime import datetime
 import numpy as np
 from threading import Thread
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTextEdit, QPushButton, QLabel, 
                              QFileDialog, QSplitter, QListWidget, QTabWidget,
                              QGroupBox, QMessageBox, QStatusBar, QToolBar,
-                             QAction, QMenuBar, QMenu)
+                             QAction, QMenuBar, QMenu, QComboBox)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QSyntaxHighlighter, QTextCursor
 
@@ -25,30 +30,77 @@ class AudioRecorder(QThread):
     recording_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
     
-    def __init__(self):
+    def __init__(self, transcription_mode="ATC Strict", model_name="small", device_id=None):
         super().__init__()
         self.is_recording = False
         self.sample_rate = 16000
         self.audio_data = []
         self.stream = None
-        self.transcriber = None
-        self._load_transcriber()
-    
-    def _load_transcriber(self):
-        """Load the transcriber lazily"""
+        self.recording_start_time = None
+        self.transcription_mode = transcription_mode
+        self.model_name = model_name
+        self.device_id = device_id  # Use selected microphone
+        self.last_debug_clip_path = None
+        self.pending_audio_array = None
+
+    def _save_debug_clip(self, source_wav_path):
+        """Persist problematic audio clips for later inspection."""
+        debug_dir = os.path.join(os.path.dirname(__file__), "debug_audio")
+        os.makedirs(debug_dir, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = os.path.join(debug_dir, f"low_confidence_{stamp}.wav")
+        shutil.copy2(source_wav_path, out_path)
+        self.last_debug_clip_path = out_path
+        print(f"[DEBUG] Saved low-confidence audio clip: {out_path}")
+        return out_path
+
+    def _transcribe_with_subprocess(self, audio_path):
+        """Run transcription in a child process to avoid hard crashes from native DLL issues."""
+        worker_path = os.path.join(os.path.dirname(__file__), "transcribe_worker.py")
+        if not os.path.exists(worker_path):
+            raise RuntimeError(f"Missing transcription worker: {worker_path}")
+
+        completed = subprocess.run(
+            [sys.executable, worker_path, audio_path],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env={
+                **os.environ,
+                "ATC_TRANSCRIPTION_MODE": self.transcription_mode,
+                "ATC_WHISPER_MODEL": self.model_name,
+            }
+        )
+
+        if completed.returncode != 0:
+            stderr = (completed.stderr or "").strip()
+            stdout = (completed.stdout or "").strip()
+            details = stderr or stdout or f"worker exited with code {completed.returncode}"
+            raise RuntimeError(details)
+
+        stdout = (completed.stdout or "").strip()
         try:
-            from faster_whisper import WhisperModel
-            self.transcriber = WhisperModel("base", device="cpu", compute_type="int8")
-        except Exception as e:
-            self.error_occurred.emit(f"Transcriber not available: {e}")
+            payload = json.loads(stdout)
+            text = (payload.get("text") or "").strip()
+            low_confidence = bool(payload.get("low_confidence", False))
+            prompt_echo = bool(payload.get("prompt_echo", False))
+            numeric_loop = bool(payload.get("numeric_loop", False))
+            model_used = payload.get("model_used", "unknown")
+            print(f"[TRANSCRIPTION] Model used: {model_used}, Confidence: {payload.get('avg_logprob', 'N/A')}, Low-confidence flag: {low_confidence}")
+            return text, low_confidence, prompt_echo, numeric_loop
+        except Exception:
+            # Backward compatibility for plain-text worker output.
+            return stdout, False, False, False
     
     def start_recording(self):
         """Start recording audio"""
         try:
             import sounddevice as sd
+
             print("[DEBUG] Starting audio recording...")
             self.is_recording = True
             self.audio_data = []
+            self.recording_start_time = time.monotonic()
             
             def audio_callback(indata, frames, time_info, status):
                 if status:
@@ -64,7 +116,7 @@ class AudioRecorder(QThread):
                 channels=1,
                 callback=audio_callback,
                 blocksize=4096,
-                device=None
+                device=self.device_id
             )
             self.stream.start()
             print("[DEBUG] Recording stream started")
@@ -76,7 +128,7 @@ class AudioRecorder(QThread):
             self.error_occurred.emit(f"Recording error: {e}")
     
     def stop_recording(self):
-        """Stop recording and transcribe"""
+        """Stop recording and start async transcription in the worker thread."""
         self.is_recording = False
         try:
             print("[DEBUG] Stopping recording...")
@@ -88,35 +140,82 @@ class AudioRecorder(QThread):
             
             self.stream.stop()
             self.stream.close()
+            self.stream = None
             print(f"[DEBUG] Stopped, {len(self.audio_data)} chunks captured")
             
             if not self.audio_data:
                 self.error_occurred.emit("No audio recorded")
+                self.recording_finished.emit()
                 return
             
             # Concatenate audio data
             audio_array = np.concatenate(self.audio_data, axis=0)
-            
-            # Save to temporary file for transcription
+            duration_sec = float(len(audio_array)) / float(self.sample_rate)
+            rms = float(np.sqrt(np.mean(np.square(audio_array)))) if len(audio_array) else 0.0
+            print(f"[DEBUG] Audio stats: duration={duration_sec:.2f}s rms={rms:.6f}")
+
+            if duration_sec < 0.5:
+                self.error_occurred.emit("Recording too short. Hold Record for at least 1 second.")
+                self.recording_finished.emit()
+                return
+
+            if rms < 0.002:
+                self.error_occurred.emit(
+                    "No audible signal captured. Select the correct Windows input device and raise input volume."
+                )
+                self.recording_finished.emit()
+                return
+            self.pending_audio_array = audio_array
+            self.start()
+        except ImportError:
+            self.error_occurred.emit("soundfile not installed. Run: pip install soundfile")
+            self.recording_finished.emit()
+        except Exception as e:
+            self.error_occurred.emit(f"Transcription error: {e}")
+            self.recording_finished.emit()
+
+    def run(self):
+        """Transcribe prepared audio off the UI thread."""
+        if self.pending_audio_array is None:
+            self.recording_finished.emit()
+            return
+
+        audio_array = self.pending_audio_array
+        self.pending_audio_array = None
+
+        try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp_path = tmp.name
-            
+
             try:
                 import soundfile as sf
                 sf.write(tmp_path, audio_array, self.sample_rate)
-                
-                # Transcribe
-                if self.transcriber is None:
-                    self.error_occurred.emit("Transcriber not loaded")
+
+                text, low_confidence, prompt_echo, numeric_loop = self._transcribe_with_subprocess(tmp_path)
+                if low_confidence:
+                    print("[DEBUG] Low-confidence transcription detected")
+                    self._save_debug_clip(tmp_path)
+
+                if prompt_echo:
+                    self.error_occurred.emit(
+                        "Transcription prompt-echo detected (not actual audio). Try a louder/clearer recording or switch mode to General Speech."
+                    )
                     return
-                
-                segments, _ = self.transcriber.transcribe(
-                    tmp_path,
-                    language="en",
-                    vad_filter=True,
-                    condition_on_previous_text=False
-                )
-                text = " ".join(seg.text.strip() for seg in segments if seg.text)
+
+                if numeric_loop:
+                    self.error_occurred.emit(
+                        "Detected repetitive numeric hallucination. Check input device/source, increase voice clarity, or switch to General Speech mode."
+                    )
+                    return
+
+                if not text.strip():
+                    self.error_occurred.emit(
+                        "No speech detected. Try a closer microphone, louder source, or disable background noise suppression."
+                    )
+                    return
+
+                if low_confidence and not (text.startswith('<') and text.endswith('>')):
+                    text = f"<{text}>"
                 self.transcription_ready.emit(text)
             finally:
                 if os.path.exists(tmp_path):
@@ -132,7 +231,10 @@ class AudioRecorder(QThread):
 class ATCFormatter:
     """Handles all ATC transcription formatting rules based on training guidelines"""
 
-    # Standard phraseology (FAA AIM/JO 7110.65) for pilots and controllers
+    # Standard phraseology references:
+    # - FAA Order JO 7110.65BB (ATC procedures and phraseology)
+    # - FAA AIM Chapter 4 (radio communications)
+    # - FAA Pilot/Controller Glossary
     PILOT_PHRASEOLOGY = {
         'roger', 'wilco', 'affirmative', 'negative', 'standby', 'unable',
         'ready', 'request', 'with you', 'leaving', 'passing', 'descending',
@@ -199,7 +301,7 @@ class ATCFormatter:
         'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
         'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
         'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty',
-        'sixty', 'seventy', 'eighty', 'ninety'
+        'sixty', 'seventy', 'eighty', 'ninety', 'oh'
     }
     NATO_WORDS = {
         'ALFA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL',
@@ -222,6 +324,7 @@ class ATCFormatter:
         'contact', 'expect', 'proceed', 'runway', 'heading', 'altimeter', 'frequency', 'report',
         'approved', 'radar', 'services', 'terminated', 'change', 'via', 'ground', 'tower', 'approach'
     }
+    FACILITY_SUFFIX_WORDS = {'ground', 'tower', 'approach', 'center', 'departure', 'clearance', 'ramp'}
     LOWERCASE_WORDS = {
         'airport', 'tower', 'runway', 'ground', 'approach', 'ramp', 'clearance', 'altimeter',
         'departure', 'arrival', 'contact', 'center', 'flight', 'level', 'radar', 'services',
@@ -235,6 +338,55 @@ class ATCFormatter:
         'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'
     }
     FILLER_WORDS = {'uh', 'um', 'oh', 'ah', 'hmm'}
+
+    # Common ASR-to-ATC phrase corrections.
+    PHRASEOLOGY_CORRECTIONS = [
+        (r'\bcome and maintain\b', 'maintain'),
+        (r'\bcome to maintain\b', 'climb and maintain'),
+        (r'\bmaintain follow level\b', 'maintain flight level'),
+        (r'\bfollowable\b', 'flight level'),
+        (r'\bfollow level\b', 'flight level'),
+        (r'\bfollow up altitude\b', 'flight level'),
+        (r'\bfollow up\b', 'flight level'),
+        (r'\bmaintain level\b', 'maintain flight level'),
+        (r'\bvolleyball level\b', 'flight level'),
+        (r'\bvolleyball\b', 'flight level'),
+        (r'\bclimb maintain\b', 'climb and maintain'),
+        (r'\bflight level level\b', 'flight level'),
+        (r'\bcamp level\b', 'flight level'),
+        (r'\bline up and weight\b', 'line up and wait'),
+        (r'\bhold shirt\b', 'hold short'),
+        (r'\bfight level\b', 'flight level'),
+        (r'\bflight label\b', 'flight level'),
+        (r'\bsquak\b', 'squawk'),
+        (r'\bsquack\b', 'squawk'),
+        (r'\bat camp flight level\b', 'at flight level'),
+        (r'\bclimb at flight level\b', 'climb and maintain flight level'),
+        (r'\bdescend at flight level\b', 'descend and maintain flight level'),
+        (r'\bmaintain altitude\b', 'maintain flight level'),
+    ]
+
+    NON_STANDARD_PHRASEOLOGY = {
+        r'\bvolleyball\b': 'flight level',
+        r'\bfollowable\b': 'flight level',
+        r'\bmain thing\b': 'maintain',
+        r'\bcome and take\b': 'contact',
+        r'\bhold shirt\b': 'hold short',
+        r'\bline up and weight\b': 'line up and wait',
+    }
+
+    CALLSIGN_SPELLING_CORRECTIONS = [
+        (r'\bnovenber\b', 'NOVEMBER'),
+        (r'\bnovemer\b', 'NOVEMBER'),
+        (r'\bnovembre\b', 'NOVEMBER'),
+        (r'\bnovamber\b', 'NOVEMBER'),
+        (r'\btangle\b', 'TANGO'),  # Common mishearing of Tango
+        (r'\bdiver\b', 'DELTA'),  # Common mishearing of Delta
+        (r'\bdevil\b', 'DELTA'),  # Another mishearing variant
+        (r'\bunited\b', 'UNITED'),
+        (r'\bamerican\b', 'AMERICAN'),
+        (r'\bsouthwest\b', 'SOUTHWEST'),
+    ]
     
     def __init__(self):
         self.violations = []
@@ -260,9 +412,13 @@ class ATCFormatter:
         
         # Step 1: Check for violations BEFORE formatting
         self.check_violations_before(original_text)
+        self.check_non_standard_phraseology(original_text)
         
         # Step 2: Normalize special cases (AO2 handling)
         formatted = self.normalize_special_cases(text)
+
+        # Step 2.5: Clean recurring ASR noise patterns from low-quality captures.
+        formatted = self.cleanup_asr_noise(formatted)
         
         # Step 3: Remove all punctuation except commas (Rule from Image 3)
         formatted = self.remove_punctuation(formatted)
@@ -272,6 +428,12 @@ class ATCFormatter:
         
         # Step 5: Convert numbers to words (Rule from Images 6-7)
         formatted = self.convert_numbers_to_words(formatted)
+
+        # Step 5.5: Remove commas accidentally inserted inside spelled number sequences.
+        formatted = self.normalize_number_sequence_commas(formatted)
+
+        # Step 5.6: Correct common phraseology/terminology errors.
+        formatted = self.apply_phraseology_corrections(formatted)
         
         # Step 6: Handle capitalization (Rules from Images 4-5, 11)
         formatted = self.apply_capitalization(formatted)
@@ -287,8 +449,84 @@ class ATCFormatter:
         
         return formatted, self.violations
 
+    def cleanup_asr_noise(self, text):
+        """Normalize common misheard filler phrases from radio/static captures."""
+        cleaned = text
+        replacements = {
+            r'\bcome and maintain\b': 'maintain',
+            r'\bcome to maintain\b': 'climb and maintain',
+            r'\bmaintain follow level\b': 'maintain flight level',
+            r'\bfollow level\b': 'flight level',
+            r'\bfollowable\b': 'flight level',
+            r'\bat camp level\b': 'at flight level',
+            r'\bmain thing\b': 'maintain',
+            r'\bvolleyball\b': 'flight level',
+            r'\bcome and take\b': 'contact',
+            r'\bthe channel is done\b': '',
+        }
+        for pattern, repl in replacements.items():
+            cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
+
+        # Collapse duplicate whitespace introduced by removals.
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned
+
+    def normalize_number_sequence_commas(self, text):
+        """Remove commas between number words (e.g., 'three, two, zero' -> 'three two zero')."""
+        number_terms = (
+            'zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
+            'thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|'
+            'thirty|forty|fifty|sixty|seventy|eighty|ninety|oh|point'
+        )
+        pair_pattern = rf'\b({number_terms})\b\s*,\s*\b({number_terms})\b'
+        normalized = text
+        while True:
+            updated = re.sub(pair_pattern, r'\1 \2', normalized, flags=re.IGNORECASE)
+            if updated == normalized:
+                break
+            normalized = updated
+        normalized = re.sub(r'\s+', ' ', normalized)
+        return normalized.strip()
+
+    def apply_phraseology_corrections(self, text):
+        """Apply common ATC phraseology and terminology corrections."""
+        corrected = text
+        for pattern, replacement in self.PHRASEOLOGY_CORRECTIONS:
+            updated = re.sub(pattern, replacement, corrected, flags=re.IGNORECASE)
+            if updated != corrected:
+                raw_pattern = pattern.replace('\\b', '')
+                self.violations.append(
+                    f"Phraseology correction applied: '{raw_pattern}' -> '{replacement}'"
+                )
+            corrected = updated
+
+        # Normalize repeated phrase stutter artifacts.
+        corrected = re.sub(
+            r'\b(maintain flight level(?:\s+(?:zero|one|two|three|four|five|six|seven|eight|nine))+?)\s+\1\b',
+            r'\1',
+            corrected,
+            flags=re.IGNORECASE,
+        )
+
+        corrected = re.sub(r'\s+', ' ', corrected).strip()
+        return corrected
+
+    def check_non_standard_phraseology(self, text):
+        """Report common non-ATC wording that should be corrected."""
+        lowered = (text or '').lower()
+        for pattern, suggested in self.NON_STANDARD_PHRASEOLOGY.items():
+            if re.search(pattern, lowered):
+                raw = pattern.replace('\\b', '')
+                self.violations.append(
+                    f"Non-standard phraseology detected: '{raw}'. Suggested ATC term: '{suggested}'."
+                )
+
     def normalize_special_cases(self, text):
         """Normalize special cases like AO2 to spoken form and handle tail numbers"""
+        # Common ASR misspellings of callsign starters.
+        for pattern, replacement in self.CALLSIGN_SPELLING_CORRECTIONS:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
         # Evaluation-specific rule: AO2 is spoken as "a oh two" and should not be treated like an acronym.
         text = re.sub(r'\bAO2\b', 'a oh two', text, flags=re.IGNORECASE)
         
@@ -309,6 +547,13 @@ class ATCFormatter:
         
         # Replace N-format tail numbers
         text = re.sub(r'\bN\d+[A-Z]{0,3}\b', convert_tail_number, text, flags=re.IGNORECASE)
+
+        # Enforce callsign number expansion: NOVEMBER 998 -> NOVEMBER NINE NINE EIGHT
+        def expand_november_number(match):
+            digits = match.group(1)
+            return 'NOVEMBER ' + ' '.join(self.NUMBER_DIGITS[d].upper() for d in digits)
+
+        text = re.sub(r'\bNOVEMBER\s+(\d{1,6})\b', expand_november_number, text, flags=re.IGNORECASE)
         return text
     
     def check_phraseology(self, text):
@@ -324,7 +569,7 @@ class ATCFormatter:
             pattern = r'\b' + re.escape(phrase) + r'\b'
             if re.search(pattern, text_lower):
                 self.violations.append(
-                    f"Prohibited phrase: '{phrase}' is not standard ATC phraseology (FAA AIM/JO 7110.65)")
+                    f"Prohibited phrase: '{phrase}' is not standard ATC phraseology (FAA JO 7110.65BB / AIM Ch.4 / Pilot-Controller Glossary)")
 
         # Encourage use of standard phraseology (pilot/controller)
         # Use word boundaries for each phrase
@@ -337,7 +582,7 @@ class ATCFormatter:
                 break
         if not found_phraseology:
             self.violations.append(
-                "No standard ATC phraseology detected. Use proper FAA/ICAO terms (e.g., 'roger', 'cleared', 'contact', etc.)")
+                "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact').")
     
     def remove_punctuation(self, text):
         """
@@ -347,6 +592,7 @@ class ATCFormatter:
         # Remove periods, question marks, quotes, exclamation points
         text = re.sub(r'[.!?"\']', '', text)
         text = text.replace(';', ',').replace(':', ',')
+        text = text.replace('-', ' ')
         return text
     
     def convert_special_numbers(self, text):
@@ -427,6 +673,32 @@ class ATCFormatter:
                 formatted_words.append(' '.join(bracket_content))
                 continue
 
+            # Numeric-only callsign handling: e.g., "five one nine zero maintain ..."
+            if self._is_numeric_callsign_start(words, i):
+                j = i
+                callsign_parts = []
+                while j < len(words):
+                    next_word = words[j]
+                    next_raw = next_word.rstrip(',')
+                    next_lower = next_raw.lower()
+                    trailing_comma = next_word.endswith(',')
+
+                    if j > i and next_lower in self.INSTRUCTION_WORDS:
+                        break
+                    if self._is_spoken_number_token(next_raw) or re.fullmatch(r'[A-Za-z]', next_raw):
+                        callsign_parts.append(self._callsign_token(next_raw))
+                        j += 1
+                        if trailing_comma:
+                            callsign_parts[-1] = callsign_parts[-1] + ','
+                            break
+                        continue
+                    break
+
+                if len(callsign_parts) >= 3:
+                    formatted_words.extend(callsign_parts)
+                    i = j
+                    continue
+
             if self._is_callsign_start(word_upper):
                 j = i
                 callsign_parts = []
@@ -446,7 +718,7 @@ class ATCFormatter:
                     if (
                         j == i
                         or next_raw.isdigit()
-                        or next_lower in self.NUMBER_WORDS
+                        or self._is_spoken_number_token(next_raw)
                         or next_upper in self.NATO_WORDS
                         or re.fullmatch(r'[A-Za-z]', next_raw)
                     ):
@@ -465,6 +737,12 @@ class ATCFormatter:
 
             if word_upper in self.AVIATION_ACRONYMS:
                 formatted_word = word_upper
+            elif word_upper in self.NATO_WORDS:
+                # All NATO phonetic letters should be capitalized
+                formatted_word = word_upper
+            elif (i + 1) < len(words) and words[i + 1].rstrip(',').lower() in self.FACILITY_SUFFIX_WORDS:
+                # Facility/location name capitalization: "Salinas ground", "Miami center"
+                formatted_word = word_lower.capitalize()
             elif word_lower in self.FILLER_WORDS:
                 formatted_word = word_lower
             elif word_lower in self.LOWERCASE_WORDS:
@@ -493,6 +771,8 @@ class ATCFormatter:
         token_lower = token.lower()
         if token.isdigit():
             return ' '.join(self.NUMBER_DIGITS[d].upper() for d in token)
+        if token_lower == 'oh':
+            return 'OH'
         if token_lower in self.NUMBER_WORDS:
             return token_upper
         if token_upper in self.NATO_WORDS:
@@ -503,6 +783,37 @@ class ATCFormatter:
                 return 'ALFA'
             return letter
         return token_upper
+
+    def _is_spoken_number_token(self, token):
+        token_lower = token.lower()
+        return token.isdigit() or token_lower in self.NUMBER_WORDS
+
+    def _is_numeric_callsign_start(self, words, index):
+        # Callsign usually starts a transmission or follows a comma.
+        if index < 0 or index >= len(words):
+            return False
+        if index > 0 and not words[index - 1].endswith(','):
+            return False
+
+        probe = []
+        j = index
+        while j < len(words) and len(probe) < 6:
+            token = words[j].rstrip(',')
+            if self._is_spoken_number_token(token):
+                probe.append(token)
+                j += 1
+                continue
+            break
+
+        # Three+ spoken number tokens at start followed by an instruction word => callsign-like pattern.
+        if len(probe) < 3:
+            return False
+        if j < len(words):
+            next_token = words[j].rstrip(',').lower()
+            if next_token == 'and' and (j + 1) < len(words):
+                next_token = words[j + 1].rstrip(',').lower()
+            return next_token in self.INSTRUCTION_WORDS
+        return False
     
     def validate_brackets(self, text):
         """
@@ -678,6 +989,43 @@ class ATCSyntaxHighlighter(QSyntaxHighlighter):
 
 
 class ATCTranscriptionApp(QMainWindow):
+    def _passes_publish_gate(self, text):
+        """Return whether a transcript is good enough to publish to the text boxes."""
+        stripped = (text or "").strip()
+        if not stripped:
+            return False, "No speech detected in recording."
+
+        if stripped.startswith('<') and stripped.endswith('>'):
+            return False, "Transcript withheld: low-confidence recognition."
+
+        if not self._looks_like_atc_text(stripped):
+            return False, "Transcript withheld: phraseology/structure does not look like valid ATC." 
+
+        return True, ""
+
+    def _looks_like_atc_text(self, text):
+        """Heuristic to avoid auto-formatting obvious non-ATC gibberish."""
+        tokens = re.findall(r"[A-Za-z]+", (text or "").lower())
+        if not tokens:
+            return False
+
+        atc_markers = {
+            "runway", "heading", "altitude", "flight", "level", "tower", "ground", "approach", "center",
+            "cleared", "maintain", "descend", "climb", "contact", "squawk", "vfr", "ifr", "hold", "short",
+            "line", "wait", "taxi", "report", "november", "united", "american", "delta", "southwest", "jetblue"
+        }
+        marker_hits = sum(1 for token in tokens if token in atc_markers)
+
+        # If we got at least one strong ATC marker, format it.
+        if marker_hits >= 1:
+            return True
+
+        # Short clips without ATC markers are likely non-ATC/general speech.
+        if len(tokens) <= 6:
+            return False
+
+        return False
+
     def save_rules_from_editor(self):
         """Save rules from the Rules Editor UI to the formatter (and eventually to disk)"""
         # Get phraseology and prohibited words from editor
@@ -717,6 +1065,7 @@ class ATCTranscriptionApp(QMainWindow):
         self.formatter = ATCFormatter()
         self.audio_recorder = None
         self.is_recording = False
+        self.pending_review_transcript = ""
         self.init_ui()
     
     def init_ui(self):
@@ -798,6 +1147,20 @@ class ATCTranscriptionApp(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
     
+    def _get_input_devices(self):
+        """Get list of available input devices"""
+        try:
+            import sounddevice as sd
+            devices = []
+            device_list = sd.query_devices()
+            for i, d in enumerate(device_list):
+                if d['max_input_channels'] > 0:
+                    devices.append((i, d['name']))
+            return devices
+        except Exception as e:
+            print(f"[ERROR] Failed to query devices: {e}")
+            return [(None, "Default Device")]
+
     def create_toolbar(self):
         """Create the toolbar"""
         toolbar = QToolBar()
@@ -812,6 +1175,40 @@ class ATCTranscriptionApp(QMainWindow):
         self.stop_button.clicked.connect(self.stop_recording)
         self.stop_button.setEnabled(False)
         toolbar.addWidget(self.stop_button)
+
+        toolbar.addSeparator()
+
+        device_label = QLabel("Microphone:")
+        toolbar.addWidget(device_label)
+
+        self.device_combo = QComboBox()
+        devices = self._get_input_devices()
+        for device_id, device_name in devices:
+            self.device_combo.addItem(device_name, device_id)
+        self.device_combo.setToolTip("Select which microphone/input device to use (e.g., webcam mic)")
+        toolbar.addWidget(self.device_combo)
+
+        toolbar.addSeparator()
+
+        mode_label = QLabel("Mode:")
+        toolbar.addWidget(mode_label)
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["ATC Strict", "General Speech"])
+        self.mode_combo.setCurrentText("ATC Strict")
+        self.mode_combo.setToolTip("ATC Strict applies ATC-biased transcription and auto-formatting. General Speech keeps raw text.")
+        toolbar.addWidget(self.mode_combo)
+
+        toolbar.addSeparator()
+
+        model_label = QLabel("Model:")
+        toolbar.addWidget(model_label)
+
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["small", "base"])
+        self.model_combo.setCurrentText("small")
+        self.model_combo.setToolTip("small is stronger than base for noisy ATC audio but may run slower on CPU.")
+        toolbar.addWidget(self.model_combo)
         
         toolbar.addSeparator()
         
@@ -833,10 +1230,14 @@ class ATCTranscriptionApp(QMainWindow):
         self.is_recording = True
         self.record_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.statusBar.showMessage("Recording... (click Stop to end)")
+        selected_mode = self.mode_combo.currentText() if hasattr(self, "mode_combo") else "ATC Strict"
+        selected_model = self.model_combo.currentText() if hasattr(self, "model_combo") else "small"
+        selected_device = self.device_combo.currentData() if hasattr(self, "device_combo") else None
+        selected_device_name = self.device_combo.currentText() if hasattr(self, "device_combo") else "Default"
+        self.statusBar.showMessage(f"Recording... (click Stop to end) [{selected_mode}, model={selected_model}, mic={selected_device_name}]")
         
-        # Create and start recorder
-        self.audio_recorder = AudioRecorder()
+        # Create and start recorder with selected device
+        self.audio_recorder = AudioRecorder(transcription_mode=selected_mode, model_name=selected_model, device_id=selected_device)
         self.audio_recorder.transcription_ready.connect(self.on_transcription_ready)
         self.audio_recorder.error_occurred.connect(self.on_recording_error)
         self.audio_recorder.recording_finished.connect(self.on_recording_finished)
@@ -856,15 +1257,68 @@ class ATCTranscriptionApp(QMainWindow):
     
     def on_transcription_ready(self, text):
         """Handle transcribed text"""
-        self.input_text.setPlainText(text)
+        if not text.strip():
+            self.statusBar.showMessage("No speech detected in recording", 5000)
+            QMessageBox.information(self, "No Speech Detected", "Recording completed but no speech was recognized.")
+            self.output_text.setPlainText("No speech detected in recording.")
+            return
+
+        is_uncertain = text.startswith('<') and text.endswith('>')
+        should_publish, hold_reason = self._passes_publish_gate(text)
+
+        print(f"[DEBUG] Transcription received: {len(text)} chars")
         self.statusBar.showMessage(f"Transcribed: {len(text.split())} words")
+
+        if not should_publish:
+            self.pending_review_transcript = text
+            self.violations_list.clear()
+            self.violations_list.addItem(f"⚠ {hold_reason}")
+            self.violations_list.addItem("i Full transmission was captured and checked before publishing.")
+            self.violations_list.addItem("i Use clearer audio or re-record to get an approved transcript.")
+            if self.audio_recorder and self.audio_recorder.last_debug_clip_path:
+                self.violations_list.addItem(f"i Debug audio saved: {self.audio_recorder.last_debug_clip_path}")
+            self.output_text.setPlainText("Transcript withheld pending review. See Violations tab.")
+            self.statusBar.showMessage(hold_reason, 8000)
+            return
+
+        self.pending_review_transcript = ""
+        self.input_text.setPlainText(text)
+        self.output_text.setPlainText(text)
+
+        if is_uncertain:
+            self.violations_list.clear()
+            self.violations_list.addItem("⚠ Low-confidence transcription. Kept in < > per uncertainty rule. Re-record for cleaner ATC phraseology.")
+            if self.audio_recorder and self.audio_recorder.last_debug_clip_path:
+                clip_path = self.audio_recorder.last_debug_clip_path
+                self.violations_list.addItem(f"i Debug audio saved: {clip_path}")
+            self.statusBar.showMessage("Low-confidence transcription: uncertain text preserved in angled brackets", 8000)
+            return
+
+        current_mode = self.mode_combo.currentText() if hasattr(self, "mode_combo") else "ATC Strict"
+        if current_mode == "General Speech":
+            self.violations_list.clear()
+            self.violations_list.addItem("i General Speech mode: applying ATC correction pass.")
+
+        if not self._looks_like_atc_text(text):
+            self.violations_list.clear()
+            self.violations_list.addItem("⚠ Transcription appears low-confidence or non-ATC. Showing raw text; auto-format skipped.")
+            self.statusBar.showMessage("Low-confidence transcription: auto-format skipped", 7000)
+            return
         # Auto-format
-        self.auto_format()
+        try:
+            self.auto_format()
+        except Exception as e:
+            self.violations_list.clear()
+            self.violations_list.addItem("⚠ Formatting failed. Showing raw transcription.")
+            self.output_text.setPlainText(text)
+            self.statusBar.showMessage(f"Formatting error: {e}", 7000)
+            print(f"[ERROR] Auto-format failed: {e}")
     
     def on_recording_error(self, error_msg):
         """Handle recording errors"""
         QMessageBox.warning(self, "Recording Error", error_msg)
         self.statusBar.showMessage(f"Error: {error_msg}")
+        self.output_text.setPlainText(f"Recording error: {error_msg}")
         self.is_recording = False
         self.record_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -1147,29 +1601,33 @@ class ATCTranscriptionApp(QMainWindow):
                 QMessageBox.critical(self, "Save Error", f"Could not save file:\n{str(e)}")
     
     def show_rules(self):
-        """Show ATC formatting rules summary, referencing FAA AIM and FAA Order JO 7110.65"""
+        """Show ATC formatting rules summary with authoritative FAA references."""
         QMessageBox.information(
             self,
             "ATC Formatting Rules",
-            "Key Rules from Training Images (All rules are based on FAA AIM and FAA Order JO 7110.65):\n\n"
+            "Key Rules from Training Images and FAA references:\n"
+            "• FAA Order JO 7110.65BB (effective Feb 2025)\n"
+            "• FAA Aeronautical Information Manual (AIM), Chapter 4\n"
+            "• FAA Pilot/Controller Glossary\n\n"
+            "All phrasing in this tool should be traceable to those references.\n\n"
             "📋 Image 1: Common Failures\n"
             "• Formatting violations (highest impact)\n"
             "• Callsign handling errors\n\n"
             "🚫 Image 3: Punctuation\n"
-            "• Use ONLY commas (FAA AIM/JO 7110.65)\n"
-            "• NO periods, question marks, or quotes (FAA AIM/JO 7110.65)\n\n"
+            "• Use ONLY commas (FAA JO 7110.65BB / AIM Ch.4)\n"
+            "• NO periods, question marks, or quotes (FAA JO 7110.65BB / AIM Ch.4)\n\n"
             "🔤 Images 4-5: Capitalization\n"
-            "• Callsigns in ALL CAPS (FAA Order JO 7110.65 §2-4-20)\n"
-            "• Non-callsign words lowercase (airport, tower, runway) (FAA AIM/JO 7110.65)\n\n"
+            "• Callsigns in ALL CAPS (FAA JO 7110.65BB)\n"
+            "• Non-callsign words lowercase (airport, tower, runway) (AIM Ch.4 / Glossary)\n\n"
             "🔢 Images 6-7: Numbers\n"
-            "• Spell out ALL numbers (one two three) (FAA AIM/JO 7110.65)\n"
-            "• NO digits, NO hyphens (FAA AIM/JO 7110.65)\n\n"
+            "• Spell out ALL numbers (one two three) (FAA JO 7110.65BB / Glossary)\n"
+            "• NO digits, NO hyphens (FAA JO 7110.65BB / Glossary)\n\n"
             "💬 Image 8: Filler Words\n"
-            "• Include: uh, um, oh, ah, hmm (FAA AIM/JO 7110.65)\n\n"
+            "• Include: uh, um, oh, ah, hmm (AIM Ch.4 context guidance)\n\n"
             "📐 Images 9-10: Angled Brackets\n"
-            "• Use <> for uncertain words (FAA AIM/JO 7110.65)\n"
-            "• Never leave empty brackets (FAA AIM/JO 7110.65)\n\n"
-            "✈️ Image 11: Entire callsign ALL CAPS (FAA Order JO 7110.65 §2-4-20)\n\n"
+            "• Use <> for uncertain words (AIM Ch.4 communication best practices)\n"
+            "• Never leave empty brackets (AIM Ch.4 communication best practices)\n\n"
+            "✈️ Image 11: Entire callsign ALL CAPS (FAA JO 7110.65BB)\n\n"
             "See 'Formatting Rules' tab for complete details."
         )
     
@@ -1195,7 +1653,13 @@ class ATCTranscriptionApp(QMainWindow):
         """Get formatted HTML for rules reference - based on training images"""
         return """
         <h2>ATC Transcription Formatting Rules</h2>
-        <p><i>Based on your training guidelines</i></p>
+        <p><i>Based on your training guidelines and FAA references.</i></p>
+        <p><b>Authoritative References:</b></p>
+        <ul>
+            <li>FAA Order JO 7110.65BB (effective Feb 2025)</li>
+            <li>FAA Aeronautical Information Manual (AIM), Chapter 4</li>
+            <li>FAA Pilot/Controller Glossary</li>
+        </ul>
         
         <h3>📋 Image 1: Most Common Failures</h3>
         <p>Most failures were not caused by one big mistake, but by many small rule violations:</p>

@@ -1,0 +1,11 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Runtime/generated artifacts
+app_run.log
+debug_audio/
+*.wav
+
+# Local helper scripts
+test_audio.py
