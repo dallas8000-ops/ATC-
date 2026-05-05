@@ -166,7 +166,10 @@ class ATCFormatter:
     
     def format_transcript(self, text):
         """
-        Apply all ATC formatting rules to the text
+        Apply all ATC formatting rules to the text.
+        Not thread-safe for concurrent use on the same instance (violations are
+        stored on self); use a new ATCFormatter() per request in multi-threaded servers.
+
         Based on training guidelines:
         1. Remove all punctuation except commas
         2. Spell out ALL numbers
@@ -674,7 +677,14 @@ class ATCFormatter:
             self.violations.append("⚠ Entire callsign should be ALL CAPS - write 'VOLARIS' not 'Volaris' (Image 11, FAA Order JO 7110.65 §2-4-20)")
 
 def classify_speaker_role(utterance):
-    """Heuristic ATC/Pilot/Unknown classifier aligned to evaluation guidance."""
+    """
+    Lightweight heuristic ATC vs Pilot vs Unknown classifier.
+
+    Uses keyword cues and callsign-shaped patterns. Confidence values are ordinal
+    scales for UX/routing, not calibrated probabilities. Short transmissions often
+    tie and correctly resolve to Unknown — replace with a trained model for
+    production-grade accuracy.
+    """
     text = (utterance or '').strip()
     lowered = text.lower()
     if not text:
@@ -695,6 +705,22 @@ def classify_speaker_role(utterance):
         atc_score += 1
     if re.search(r',\s*[A-Z][A-Z0-9 ]+$', text):
         pilot_score += 1
+
+    # When primary cues tie, break ties with secondary ATC vs pilot-only vocabulary.
+    if atc_score == pilot_score:
+        atc_extra = bool(
+            re.search(
+                r'\b(squawk|runway|frequency|approach|tower|ground|center|expect|radar|traffic|'
+                r'cleared to land|cleared for takeoff|descend and maintain|climb and maintain|'
+                r'line up|hold short)\b',
+                lowered,
+            )
+        )
+        pilot_extra = bool(re.search(r'\b(thanks|thank you|good day)\b', lowered))
+        if atc_extra and not pilot_extra:
+            atc_score += 1
+        elif pilot_extra and not atc_extra:
+            pilot_score += 1
 
     if atc_score == pilot_score:
         return {'speaker_role': 'Unknown', 'confidence': 0.5, 'reason': 'Ambiguous cue mix'}

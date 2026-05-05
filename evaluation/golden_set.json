@@ -12,7 +12,7 @@
       "id": "ex1_punctuation",
       "input": "NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated. Squawk VFR, change to advisory is approved.",
       "expected_formatted": "NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated squawk VFR, change to advisory is approved",
-      "expected_role": "Unknown",
+      "expected_role": "ATC",
       "expected_violations": [
         "⚠ Periods should not be used (Image 3: Punctuation Rules)"
       ]
@@ -31,7 +31,7 @@
       "id": "ex3_twenty_nine_hyphen",
       "input": "NOVEMBER TWENTY-NINE EIGHTEEN radar services terminated",
       "expected_formatted": "NOVEMBER TWENTY NINE EIGHTEEN radar services terminated",
-      "expected_role": "Unknown",
+      "expected_role": "ATC",
       "expected_violations": [
         "⚠ No hyphens in number words - write 'TWENTY NINE' not 'TWENTY-NINE' (Image 7)",
         "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact')."

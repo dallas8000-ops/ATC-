@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import time
 from threading import Lock
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from werkzeug.utils import secure_filename
@@ -11,6 +12,40 @@ app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  # 20MB max
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
+
+# Remove old files from uploads/ (fail-open if env unset)
+UPLOAD_MAX_AGE_SEC = int(os.environ.get('UPLOAD_MAX_AGE_HOURS', '24')) * 3600
+UPLOAD_CLEANUP_INTERVAL_SEC = float(os.environ.get('UPLOAD_CLEANUP_INTERVAL_SEC', '3600'))
+_upload_cleanup_last = 0.0
+_upload_cleanup_lock = Lock()
+
+
+def cleanup_stale_uploads():
+    """Delete regular files in UPLOAD_FOLDER older than UPLOAD_MAX_AGE_SEC."""
+    folder = app.config['UPLOAD_FOLDER']
+    if not os.path.isdir(folder):
+        return
+    now = time.time()
+    for name in os.listdir(folder):
+        path = os.path.join(folder, name)
+        try:
+            if os.path.isfile(path) and now - os.path.getmtime(path) > UPLOAD_MAX_AGE_SEC:
+                os.unlink(path)
+        except OSError:
+            pass
+
+
+@app.before_request
+def _periodic_upload_cleanup():
+    global _upload_cleanup_last
+    if UPLOAD_MAX_AGE_SEC <= 0:
+        return
+    now = time.time()
+    with _upload_cleanup_lock:
+        if now - _upload_cleanup_last < UPLOAD_CLEANUP_INTERVAL_SEC:
+            return
+        _upload_cleanup_last = now
+    cleanup_stale_uploads()
 
 EXAMPLES_FILE = 'examples.json'
 RULES_FILE = 'custom_rules.json'
@@ -130,14 +165,19 @@ class AudioTranscriber:
         text = re.sub(r'\s+', ' ', " ".join(parts)).strip()
         return text, avg_logprob
 
-formatter = ATCFormatter()
 transcriber = AudioTranscriber()
+
+
+def _format_with_fresh_formatter(text):
+    """Use a new ATCFormatter per request so concurrent users cannot share violation state."""
+    return ATCFormatter().format_transcript(text)
+
 
 @app.route('/api/format', methods=['POST'])
 def format_transcript():
     data = _json_body()
     text = data.get('text', '')
-    formatted, violations = formatter.format_transcript(text)
+    formatted, violations = _format_with_fresh_formatter(text)
     speaker = classify_speaker_role(text)
     assessment = build_review_assessment(text, formatted, violations, speaker, avg_logprob=None)
     return jsonify({
@@ -216,7 +256,7 @@ def transcribe_audio():
     except Exception as exc:
         return jsonify({'error': f'Transcription failed: {exc}'}), 500
 
-    formatted, violations = formatter.format_transcript(raw_text)
+    formatted, violations = _format_with_fresh_formatter(raw_text)
     speaker = classify_speaker_role(raw_text)
     assessment = build_review_assessment(raw_text, formatted, violations, speaker, avg_logprob)
     return jsonify({
@@ -238,4 +278,8 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Never enable debug on a host reachable by others (interactive debugger = RCE risk).
+    _debug = os.environ.get('FLASK_DEBUG', '').strip().lower() in ('1', 'true', 'yes')
+    with app.app_context():
+        cleanup_stale_uploads()
+    app.run(debug=_debug, host=os.environ.get('FLASK_HOST', '127.0.0.1'), port=int(os.environ.get('FLASK_PORT', '5000')))

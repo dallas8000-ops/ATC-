@@ -30,9 +30,12 @@ echo ========================================
 echo Installation Complete!
 echo ========================================
 echo.
-echo To run the application:
+echo Desktop app (PyQt):
 echo   python atc_transcription_app.py
+echo   Or double-click run_app.bat
 echo.
-echo Or double-click run_app.bat
+echo Optional web UI (Flask): cd webapp ^&^& run_webapp.bat
+echo   Bind defaults to 127.0.0.1. Do not enable FLASK_DEBUG or expose the port
+echo   on a shared network — the debugger is unsafe when reachable remotely.
 echo.
 pause
