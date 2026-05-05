@@ -1,0 +1,19 @@
+name: Evaluation
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  golden-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal deps
+        run: pip install Flask Werkzeug
+      - name: Golden formatter + role regression
+        run: python evaluation/run_eval.py

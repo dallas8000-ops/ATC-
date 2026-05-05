@@ -36,6 +36,26 @@
         .audio-section {
             margin-top: 1.5em;
         }
+        .prio-high { background: #fde8e8; border-left: 4px solid #c00; }
+        .prio-medium { background: #fff8e6; border-left: 4px solid #c90; }
+        .prio-low { background: #eefaf0; border-left: 4px solid #2a7; }
+        .score-pill {
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            background: #e9eef5;
+        }
+        .queue-item {
+            border-radius: 10px;
+            padding: 0.65rem 0.85rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .hint-line {
+            font-size: 0.82rem;
+            color: #4a5568;
+        }
     </style>
 </head>
 <body>
@@ -90,6 +110,12 @@ AMERICAN 297 runway two seven left cleared to land"></textarea>
                             <button class="nav-link" id="violations-tab" data-bs-toggle="tab" data-bs-target="#violations" type="button" role="tab">Violations</button>
                         </li>
                         <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="confidence-tab" data-bs-toggle="tab" data-bs-target="#confidence" type="button" role="tab">Confidence</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="reviewq-tab" data-bs-toggle="tab" data-bs-target="#reviewq" type="button" role="tab">Review Queue <span class="badge bg-secondary rounded-pill" id="reviewBadge" style="font-size:0.65rem;">0</span></button>
+                        </li>
+                        <li class="nav-item" role="presentation">
                             <button class="nav-link" id="rules-tab" data-bs-toggle="tab" data-bs-target="#rules" type="button" role="tab">Formatting Rules</button>
                         </li>
                         <li class="nav-item" role="presentation">
@@ -118,6 +144,22 @@ AMERICAN 297 runway two seven left cleared to land"></textarea>
                         <div class="tab-pane fade" id="violations" role="tabpanel">
                             <label class="form-label fw-bold">Violations:</label>
                             <ul id="violationsList"></ul>
+                            <div id="violationHints" class="mt-3 small-help"></div>
+                        </div>
+
+                        <div class="tab-pane fade" id="confidence" role="tabpanel">
+                            <label class="form-label fw-bold">Confidence &amp; explainability</label>
+                            <div class="small-help mb-2">Combines ASR log-probability (when transcribing audio), speaker-role heuristic, and formatting checks.</div>
+                            <div id="confidencePanel" class="border rounded p-3 bg-light small">Run <strong>Format Transcript</strong> or transcribe audio to see scores and flags.</div>
+                        </div>
+
+                        <div class="tab-pane fade" id="reviewq" role="tabpanel">
+                            <label class="form-label fw-bold">Review queue</label>
+                            <p class="small-help">Low-confidence lines are added here automatically (stored in your browser). Click <strong>Load</strong> to edit the transcript again.</p>
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="clearQueueBtn">Clear queue</button>
+                            </div>
+                            <div id="reviewQueueList"></div>
                         </div>
 
                         <div class="tab-pane fade" id="rules" role="tabpanel">
@@ -170,6 +212,228 @@ AMERICAN 297 runway two seven left cleared to land"></textarea>
 </div>
 
 <script>
+const QUEUE_KEY = 'atc_review_queue_v1';
+window._lastAssessment = null;
+
+function refreshReviewBadge() {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    let n = 0;
+    try {
+        n = (JSON.parse(raw || '[]') || []).length;
+    } catch (e) {}
+    const el = document.getElementById('reviewBadge');
+    if (el) el.textContent = String(n);
+}
+
+function enqueueReview(payload) {
+    const raw = rawTextVal(payload.raw_text);
+    if (!raw.trim()) return;
+    let q = [];
+    try {
+        q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') || [];
+    } catch (e) {}
+    const entry = {
+        id: Date.now(),
+        addedAt: new Date().toISOString(),
+        ...payload,
+    };
+    q.unshift(entry);
+    q = q.slice(0, 40);
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+    refreshReviewBadge();
+    renderReviewQueue();
+}
+
+function rawTextVal(s) {
+    return (s === undefined || s === null) ? '' : String(s);
+}
+
+function renderConfidencePanel(assessment, avg_logprob) {
+    const box = document.getElementById('confidencePanel');
+    if (!assessment) {
+        box.innerHTML = 'Run <strong>Format Transcript</strong> or transcribe audio to see scores and flags.';
+        return;
+    }
+    const pr = assessment.priority || 'low';
+    const prClass = pr === 'high' ? 'prio-high' : pr === 'medium' ? 'prio-medium' : 'prio-low';
+    const flags = (assessment.risk_flags || []).map(f =>
+        `<li><strong>${escapeHtml(f.code)}</strong> — ${escapeHtml(f.detail)}</li>`).join('') || '<li>No risk flags.</li>';
+    const sp = assessment.speaker_explain || {};
+    const audioLine = assessment.components && assessment.components.audio_confidence_01 != null
+        ? `<div class="mb-2"><strong>Audio confidence</strong> (from avg logprob): <span class="score-pill">${Math.round(100 * assessment.components.audio_confidence_01)}%</span> &nbsp; <span class="hint-line">avg_logprob=${assessment.components.avg_logprob}</span></div>`
+        : `<div class="mb-2 hint-line">No audio decode this run (typed text only). Transcribe audio to enable ASR confidence.</div>`;
+    box.innerHTML = `
+        <div class="${prClass} p-2 mb-3 rounded">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <span><strong>Overall score</strong></span>
+                <span class="score-pill">${assessment.overall_score}/100</span>
+                <span class="badge ${assessment.needs_review ? 'bg-warning text-dark' : 'bg-success'}">${assessment.needs_review ? 'Needs review' : 'OK'}</span>
+                <span class="badge bg-secondary text-uppercase">${escapeHtml(pr)} priority</span>
+            </div>
+            <div class="hint-line">Weighted blend of audio (if present), role confidence, and format quality.</div>
+        </div>
+        ${audioLine}
+        <div class="mb-2"><strong>Speaker role</strong>: ${escapeHtml(sp.speaker_role)} &nbsp;
+            <span class="score-pill">confidence ${sp.confidence}</span></div>
+        <div class="hint-line mb-3"><strong>Why this role:</strong> ${escapeHtml(sp.reason || '')}</div>
+        <div class="mb-1"><strong>Components</strong></div>
+        <ul class="small mb-3">
+            <li>Role confidence (heuristic): ${assessment.components?.role_confidence}</li>
+            <li>Format quality: ${assessment.components?.format_quality_01} (from violation count)</li>
+        </ul>
+        <div class="mb-1"><strong>Risk flags</strong></div>
+        <ul class="small">${flags}</ul>`;
+}
+
+function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function renderViolationHints(assessment) {
+    const hints = document.getElementById('violationHints');
+    if (!hints) return;
+    const ve = assessment && assessment.violation_explain;
+    if (!ve || !ve.length) {
+        hints.innerHTML = '';
+        return;
+    }
+    hints.innerHTML = '<strong>Why these fired:</strong><ul class="mb-0">' +
+        ve.map(x => `<li class="hint-line"><span class="violation">${escapeHtml(x.text)}</span><br/><span>${escapeHtml(x.hint)}</span></li>`).join('') +
+        '</ul>';
+}
+
+function applyFormatResult(data, source, options = {}) {
+    const skipQueue = options.skipQueue || source === 'queue-restore';
+    window._lastAssessment = data.assessment || null;
+    document.getElementById('outputText').value = data.formatted || '';
+
+    const violationsList = document.getElementById('violationsList');
+    violationsList.innerHTML = '';
+    if (data.violations && data.violations.length > 0) {
+        data.violations.forEach(v => {
+            const li = document.createElement('li');
+            li.textContent = v;
+            li.className = 'violation';
+            violationsList.appendChild(li);
+        });
+    } else {
+        const li = document.createElement('li');
+        li.textContent = 'No violations found';
+        li.style.color = 'green';
+        violationsList.appendChild(li);
+    }
+
+    renderViolationHints(data.assessment);
+    renderConfidencePanel(data.assessment, data.avg_logprob);
+
+    const sp = document.getElementById('speakerRoleResult');
+    if (data.speaker && sp && data.speaker.speaker_role !== undefined) {
+        const s = data.speaker;
+        sp.innerHTML = `<b>Role:</b> ${escapeHtml(String(s.speaker_role))}<br/><b>Confidence:</b> ${escapeHtml(String(s.confidence))}<br/><b>Reason:</b> ${escapeHtml(String(s.reason || ''))}`;
+    }
+
+    if (!skipQueue && data.assessment && data.assessment.needs_review && rawTextVal(data.raw_text !== undefined ? data.raw_text : document.getElementById('inputText').value).trim()) {
+        enqueueReview({
+            source: source || 'format',
+            raw_text: data.raw_text !== undefined ? data.raw_text : document.getElementById('inputText').value,
+            formatted: data.formatted,
+            violations: data.violations || [],
+            assessment: data.assessment,
+            speaker: data.speaker || null,
+            filename: data.filename || null,
+        });
+    }
+}
+
+function renderReviewQueue() {
+    const list = document.getElementById('reviewQueueList');
+    if (!list) return;
+    let q = [];
+    try {
+        q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') || [];
+    } catch (e) {}
+    if (!q.length) {
+        list.innerHTML = '<p class="small-help mb-0">Queue is empty.</p>';
+        return;
+    }
+    list.innerHTML = q.map(item => {
+        const snip = escapeHtml((item.raw_text || '').slice(0, 100));
+        const pr = item.assessment?.priority || '?';
+        const sc = item.assessment?.overall_score ?? '?';
+        const divClass = pr === 'high' ? 'prio-high' : pr === 'medium' ? 'prio-medium' : 'prio-low';
+        return `<div class="queue-item ${divClass}" data-id="${item.id}">
+            <div class="d-flex justify-content-between flex-wrap gap-1">
+                <span><strong>${sc}</strong>/100 · <span class="text-uppercase">${escapeHtml(pr)}</span></span>
+                <span class="hint-line">${escapeHtml((item.addedAt || '').replace('T', ' ').slice(0, 19))}</span>
+            </div>
+            <div class="mt-1">${snip}${(item.raw_text || '').length > 100 ? '…' : ''}</div>
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-primary load-queue-btn" data-id="${item.id}">Load</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary remove-queue-btn" data-id="${item.id}">Remove</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.load-queue-btn').forEach(btn => {
+        btn.addEventListener('click', () => loadQueueItem(Number(btn.dataset.id)));
+    });
+    list.querySelectorAll('.remove-queue-btn').forEach(btn => {
+        btn.addEventListener('click', () => removeQueueItem(Number(btn.dataset.id)));
+    });
+}
+
+function loadQueueItem(id) {
+    let q = [];
+    try {
+        q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') || [];
+    } catch (e) {}
+    const item = q.find(x => x.id === id);
+    if (!item) return;
+    document.getElementById('inputText').value = item.raw_text || '';
+    document.getElementById('rawText').value = item.raw_text || '';
+    document.getElementById('outputText').value = item.formatted || '';
+    const spk = item.speaker || (item.assessment && item.assessment.speaker_explain ? {
+        speaker_role: item.assessment.speaker_explain.speaker_role,
+        confidence: item.assessment.speaker_explain.confidence,
+        reason: item.assessment.speaker_explain.reason,
+    } : {});
+    applyFormatResult({
+        formatted: item.formatted,
+        violations: item.violations || [],
+        speaker: spk,
+        assessment: item.assessment,
+        raw_text: item.raw_text,
+        avg_logprob: item.assessment?.components?.avg_logprob,
+    }, 'queue-restore', { skipQueue: true });
+    const tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));
+    tab.show();
+}
+
+function removeQueueItem(id) {
+    let q = [];
+    try {
+        q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') || [];
+    } catch (e) {}
+    q = q.filter(x => x.id !== id);
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+    refreshReviewBadge();
+    renderReviewQueue();
+}
+
+document.getElementById('clearQueueBtn').addEventListener('click', function() {
+    localStorage.removeItem(QUEUE_KEY);
+    refreshReviewBadge();
+    renderReviewQueue();
+});
+
+document.getElementById('reviewq-tab').addEventListener('click', function() {
+    renderReviewQueue();
+});
+
+refreshReviewBadge();
+
 async function loadRules() {
     const res = await fetch('/api/rules');
     const data = await res.json();
@@ -239,26 +503,10 @@ form.addEventListener('submit', async function(e) {
         body: JSON.stringify({ text: inputText })
     });
     const data = await res.json();
-    document.getElementById('outputText').value = data.formatted;
+    applyFormatResult({ ...data, raw_text: inputText }, 'format');
 
     const tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));
     tab.show();
-
-    const violationsList = document.getElementById('violationsList');
-    violationsList.innerHTML = '';
-    if (data.violations && data.violations.length > 0) {
-        data.violations.forEach(v => {
-            const li = document.createElement('li');
-            li.textContent = v;
-            li.className = 'violation';
-            violationsList.appendChild(li);
-        });
-    } else {
-        const li = document.createElement('li');
-        li.textContent = 'No violations found';
-        li.style.color = 'green';
-        violationsList.appendChild(li);
-    }
 });
 
 document.getElementById('classifyBtn').addEventListener('click', async function() {
@@ -303,23 +551,7 @@ async function transcribeByFilename(filename) {
 
     document.getElementById('rawText').value = data.raw_text || '';
     document.getElementById('inputText').value = data.raw_text || '';
-    document.getElementById('outputText').value = data.formatted || '';
-
-    const violationsList = document.getElementById('violationsList');
-    violationsList.innerHTML = '';
-    if (data.violations && data.violations.length > 0) {
-        data.violations.forEach(v => {
-            const li = document.createElement('li');
-            li.textContent = v;
-            li.className = 'violation';
-            violationsList.appendChild(li);
-        });
-    } else {
-        const li = document.createElement('li');
-        li.textContent = 'No violations found';
-        li.style.color = 'green';
-        violationsList.appendChild(li);
-    }
+    applyFormatResult(data, 'transcribe');
 
     status.textContent = 'Transcription complete';
     const tab = new bootstrap.Tab(document.querySelector('#formatted-tab'));

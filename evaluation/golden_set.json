@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "description": "Golden cases for webapp ATCFormatter + classify_speaker_role. Expected outputs match current behavior for regression; update when behavior intentionally changes.",
+  "thresholds": {
+    "min_format_exact_rate": 1.0,
+    "max_mean_wer": 0.001,
+    "min_role_accuracy": 1.0,
+    "min_violation_exact_rate": 1.0
+  },
+  "cases": [
+    {
+      "id": "ex1_punctuation",
+      "input": "NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated. Squawk VFR, change to advisory is approved.",
+      "expected_formatted": "NOVEMBER NINE NINE EIGHT BRAVO BRAVO radar services terminated squawk VFR, change to advisory is approved",
+      "expected_role": "Unknown",
+      "expected_violations": [
+        "⚠ Periods should not be used (Image 3: Punctuation Rules)"
+      ]
+    },
+    {
+      "id": "ex2_numbers_hyphen",
+      "input": "United 2648, contact Atlantic City 135.5. November 29-18 radar services terminated.",
+      "expected_formatted": "UNITED TWO SIX FOUR EIGHT, contact atlantic city one three five five NOVEMBER TWO NINE ONE EIGHT radar services terminated",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ Numbers should be spelled out - write 'one two three' not '123' (Images 6-7: Number Rules)",
+        "⚠ No hyphens between numbers - write 'two six four eight' not '26-48' (Image 7)"
+      ]
+    },
+    {
+      "id": "ex3_twenty_nine_hyphen",
+      "input": "NOVEMBER TWENTY-NINE EIGHTEEN radar services terminated",
+      "expected_formatted": "NOVEMBER TWENTY NINE EIGHTEEN radar services terminated",
+      "expected_role": "Unknown",
+      "expected_violations": [
+        "⚠ No hyphens in number words - write 'TWENTY NINE' not 'TWENTY-NINE' (Image 7)",
+        "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact')."
+      ]
+    },
+    {
+      "id": "ex4_sentence_cap",
+      "input": "One three two four two, thanks, so long, VIVA ONE EIGHT SEVEN",
+      "expected_formatted": "one three two four two, thanks, so long, VIVA ONE EIGHT SEVEN",
+      "expected_role": "Pilot",
+      "expected_violations": [
+        "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact')."
+      ]
+    },
+    {
+      "id": "ex5_flight_level_cap",
+      "input": "VOLARIS SEVENTEEN ZERO TWO, Flight Level three six zero",
+      "expected_formatted": "VOLARIS SEVENTEEN ZERO TWO, flight level three six zero",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact')."
+      ]
+    },
+    {
+      "id": "ex6_runway_cap",
+      "input": "MOBILE FOUR, Salinas ground proceed to CTAC Delta Papa Charlie, hold short Runway three one at Charlie",
+      "expected_formatted": "mobile four, Salinas ground proceed to ctac DELTA PAPA CHARLIE, hold short runway three one at CHARLIE",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ 'Runway' should not be capitalized - it's not a callsign (Image 5: Capitalization)"
+      ]
+    },
+    {
+      "id": "practice_southwest",
+      "input": "Southwest 1837, turn right heading 090, descend & maintain 4,000.",
+      "expected_formatted": "SOUTHWEST ONE EIGHT THREE SEVEN, turn right heading zero nine zero, descend & maintain four zero zero zero",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ Periods should not be used (Image 3: Punctuation Rules)",
+        "⚠ Numbers should be spelled out - write 'one two three' not '123' (Images 6-7: Number Rules)"
+      ]
+    },
+    {
+      "id": "practice_n123ab_current",
+      "input": "N123AB, taxi to Runway 27R via Alpha & Bravo.",
+      "expected_formatted": "NOVEMBER ONE TWO THREE ALFA B, taxi to runway two sevenr via alpha & BRAVO",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ Periods should not be used (Image 3: Punctuation Rules)",
+        "⚠ 'Runway' should not be capitalized - it's not a callsign (Image 5: Capitalization)"
+      ]
+    },
+    {
+      "id": "prohibited_phrase",
+      "input": "United 123, copy that, cleared to land",
+      "expected_formatted": "UNITED ONE TWO THREE, copy that, cleared to land",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ Numbers should be spelled out - write 'one two three' not '123' (Images 6-7: Number Rules)",
+        "Prohibited phrase: 'copy that' is not standard ATC phraseology (FAA JO 7110.65BB / AIM Ch.4 / Pilot-Controller Glossary)"
+      ]
+    },
+    {
+      "id": "vector_for_normalize",
+      "input": "hotel tango sierra 18 fly heading 260 vectors for, make it 265 vectors for climb, climb and maintain flight level 230",
+      "expected_formatted": "HOTEL TANGO SIERRA one eight fly heading two six zero vector for, make it two six five vector for climb, climb and maintain flight level two three zero",
+      "expected_role": "ATC",
+      "expected_violations": [
+        "⚠ Numbers should be spelled out - write 'one two three' not '123' (Images 6-7: Number Rules)"
+      ]
+    },
+    {
+      "id": "atis_unknown",
+      "input": "atis information zulu time one eight zero zero",
+      "expected_formatted": "ATIS information ZULU time one eight zero zero",
+      "expected_role": "Unknown",
+      "expected_violations": [
+        "No standard ATC phraseology detected. Use FAA JO 7110.65BB, AIM Chapter 4, and Pilot/Controller Glossary terms (e.g., 'roger', 'cleared', 'contact')."
+      ]
+    },
+    {
+      "id": "empty_input",
+      "input": "   ",
+      "expected_formatted": "   ",
+      "expected_role": "Unknown",
+      "expected_violations": []
+    }
+  ]
+}

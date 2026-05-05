@@ -160,6 +160,20 @@ AMERICAN ONE EIGHT FIVE, you are cleared to CHICAGO OHARE via WYNDE THREE depart
 - ⚠ "&" symbol instead of "and"
 
 
+## Example 13: Vector For Phraseology
+
+### BEFORE (Incorrect):
+hotel tango sierra 18 fly heading 260 vectors for, make it 265 vectors for climb, climb and maintain flight level 230
+
+### AFTER (Correct):
+HOTEL TANGO SIERRA ONE EIGHT fly heading two six zero, vector for, make it heading two six five, vector for climb, climb and maintain flight level two three zero
+
+### Violations:
+- ⚠ Callsign should be fully expanded and capitalized
+- ⚠ Numbers should be written as words
+- ⚠ "vectors for" should be normalized to "vector for"
+
+
 ## Common Mistakes to Avoid (From Training Images):
 
 ### Image 1: Most Common Failures

@@ -2,5 +2,9 @@
   {
     "input": "bravo 156 climb to 3000 report reaching 3000",
     "output": "BRAVO NE FIVE SIX climb to 3000 report reaching 3000"
+  },
+  {
+    "input": "hotel tango sierra 18 fly heading 260 vectors for, make it 265 vectors for climb, climb and maintain flight level 230",
+    "output": "HOTEL TANGO SIERRA ONE EIGHT fly heading two six zero, vector for, make it heading two six five, vector for climb, climb and maintain flight level two three zero"
   }
 ]

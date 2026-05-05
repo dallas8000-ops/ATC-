@@ -2,6 +2,9 @@
 Worker process for audio transcription.
 Runs faster-whisper in a separate process so native library crashes
 cannot terminate the PyQt UI process.
+
+Text-side quality (formatting, roles, violation lists) is regression-tested
+separately via evaluation/run_eval.py against evaluation/golden_set.json.
 """
 
 import sys
