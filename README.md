@@ -6,7 +6,7 @@ A professional Windows-based application for transcribing Air Traffic Control (A
 
 ![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)
 ![PyQt5](https://img.shields.io/badge/PyQt5-5.15+-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License](https://img.shields.io/badge/License-Proprietary-red.svg)
 
 ## Features
 
@@ -256,7 +256,7 @@ Contributions are welcome! Areas for improvement:
 
 ## License
 
-MIT License - feel free to use and modify for your needs.
+Proprietary. All rights reserved. This source code is published for viewing and evaluation only. No permission is granted to copy, use, modify, or distribute it. See [LICENSE](LICENSE) for the full terms. For licensing inquiries, visit https://gilliomfrontlinedigital.com.
 
 ## Acknowledgments
 
